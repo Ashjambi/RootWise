@@ -78,10 +78,6 @@ const KnownToolsAnalysisView: React.FC<KnownToolsAnalysisViewProps> = ({ inciden
         setAnalysisState(tool, { isLoading: false, error: "يجب إجراء تحليل السبب الجذري أولاً." });
         return;
     }
-    if (!process.env.API_KEY) {
-        setAnalysisState(tool, { isLoading: false, error: "تحليل الذكاء الاصطناعي معطل. مفتاح API_KEY غير مهيأ." });
-        return;
-    }
 
     setAnalysisState(tool, { isLoading: true, error: null });
 

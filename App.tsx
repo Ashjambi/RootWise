@@ -10,7 +10,7 @@ import NewIncidentModal from './components/NewIncidentModal';
 import GlobalCasesView from './components/GlobalCasesView';
 import KnowledgeBaseView from './components/KnowledgeBaseView';
 import ReportsView from './components/ReportsView';
-import MyActionsView from './components/MyActionsView.tsx';
+import MyActionsView from './components/Myactionsview.tsx';
 import AICoachView from './components/AICoachView';
 import RiskDashboardView from './components/RiskDashboardView';
 import AboutView from './components/AboutView';

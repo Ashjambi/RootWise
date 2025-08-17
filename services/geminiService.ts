@@ -17,21 +17,20 @@ import {
 let ai: GoogleGenAI | null = null;
 
 try {
-  // This will throw a ReferenceError if `process` is not defined, which is caught below.
-  const apiKey = process.env.API_KEY;
-  if (apiKey) {
-    ai = new GoogleGenAI({ apiKey: apiKey });
+  // Safely check for process.env.API_KEY to avoid crashing in browser environments.
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   } else {
-    console.warn("API_KEY environment variable is not set. AI features will be unavailable.");
+    console.warn("API_KEY is not configured or not accessible in this environment. AI features will be disabled.");
   }
 } catch (e) {
-  // This is the expected path in a browser environment without a build step.
-  console.warn("Could not initialize Gemini AI, likely because process.env.API_KEY is not available. AI features will be disabled.");
+  // This catch block is for any unexpected errors during initialization.
+  console.error("An unexpected error occurred during Gemini AI initialization:", e);
 }
 
 function getAiInstance(): GoogleGenAI {
     if (!ai) {
-        throw new Error("خدمة الذكاء الاصطناعي غير متاحة. يرجى التأكد من تهيئة مفتاح API بشكل صحيح.");
+        throw new Error("خدمة الذكاء الاصطناعي غير متاحة. يرجى التأكد من تهيئة مفتاح API بشكل صحيح في بيئة التشغيل.");
     }
     return ai;
 }

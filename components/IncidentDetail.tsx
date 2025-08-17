@@ -122,10 +122,6 @@ const IncidentDetail: React.FC<IncidentDetailProps> = ({ incident, allIncidents,
 
 
   const handleAnalyze = useCallback(async () => {
-    if (!process.env.API_KEY) {
-      setAnalysisError("تحليل الذكاء الاصطناعي معطل. مفتاح API_KEY غير مهيأ.");
-      return;
-    }
     setIsAnalyzing(true);
     setAnalysisError(null);
     onUpdate({ ...incident, status: IncidentStatus.Analyzing });
@@ -151,10 +147,6 @@ const IncidentDetail: React.FC<IncidentDetailProps> = ({ incident, allIncidents,
 
   const handlePredictiveAnalysis = useCallback(async () => {
     setIsAnalysisMenuOpen(false);
-    if (!process.env.API_KEY) {
-      setPredictionError("التحليل التنبؤي معطل. مفتاح API_KEY غير مهيأ.");
-      return;
-    }
     setIsPredicting(true);
     setPredictionError(null);
     try {
