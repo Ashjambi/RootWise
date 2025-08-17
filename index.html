@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RootWise — تحليل الأسباب الجذرية الذكي</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #f0f2f5;
+      --text-color: #1a202c;
+      --primary-color: #3b82f6;
+      --primary-color-dark: #2563eb;
+      --card-bg: rgba(255, 255, 255, 0.6);
+      --card-border: rgba(255, 255, 255, 0.8);
+      --shadow-light: rgba(255, 255, 255, 0.9);
+      --shadow-dark: rgba(180, 190, 200, 0.6);
+      --input-bg: rgba(255, 255, 255, 0.5);
+    }
+    body {
+      font-family: 'Cairo', 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+    }
+    .font-cairo {
+      font-family: 'Cairo', sans-serif;
+    }
+    /* --- Aurora Background --- */
+    .aurora-background {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      z-index: -1;
+      opacity: 0.6;
+    }
+    .aurora-background::before, .aurora-background::after {
+      content: '';
+      position: absolute;
+      filter: blur(80px);
+      animation: animate-aurora 15s infinite linear;
+    }
+    .aurora-background::before {
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, rgba(255, 255, 255, 0) 60%);
+      width: 500px;
+      height: 500px;
+      top: -10%;
+      left: 10%;
+    }
+    .aurora-background::after {
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+      width: 600px;
+      height: 600px;
+      bottom: -15%;
+      right: 5%;
+      animation-delay: -5s;
+    }
+    @keyframes animate-aurora {
+      0%, 100% { transform: translateX(0) translateY(0) scale(1); }
+      25% { transform: translateX(100px) translateY(50px) scale(1.1); }
+      50% { transform: translateX(-50px) translateY(-80px) scale(0.9); }
+      75% { transform: translateX(80px) translateY(40px) scale(1.05); }
+    }
+
+    /* --- Custom Scrollbar --- */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    /* --- Glass Icon Style --- */
+    .glass-icon {
+      filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.1));
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.1.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.12.0",
+    "chart.js/auto": "https://esm.sh/chart.js/auto",
+    "jspdf": "https://esm.sh/jspdf@2.5.1",
+    "html2canvas": "https://esm.sh/html2canvas@1.4.1",
+    "chart.js/": "https://esm.sh/chart.js@^4.5.0/"
+  }
+}
+</script>
+</head>
+<body>
+  <div class="aurora-background"></div>
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
