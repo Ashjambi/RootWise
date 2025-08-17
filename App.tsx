@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo } from 'react';
 import { IncidentReport, IncidentStatus, SystemicInsight, KnowledgeCapsuleItem, ActionItem, DashboardBriefing, ActiveView, AppSettings, RecommendationStatus, ParetoAnalysis } from './types';
 import { INITIAL_INCIDENTS, CURRENT_USER, DEFAULT_SETTINGS } from './constants';
@@ -9,7 +10,7 @@ import NewIncidentModal from './components/NewIncidentModal';
 import GlobalCasesView from './components/GlobalCasesView';
 import KnowledgeBaseView from './components/KnowledgeBaseView';
 import ReportsView from './components/ReportsView';
-import MyActionsView from './components/MyActionsView';
+import MyActionsView from './components/MyActionsView.tsx';
 import AICoachView from './components/AICoachView';
 import RiskDashboardView from './components/RiskDashboardView';
 import AboutView from './components/AboutView';

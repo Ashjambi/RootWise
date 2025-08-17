@@ -14,11 +14,27 @@ import {
     FaultTreeEvent
 } from '../types';
 
-if (!process.env.API_KEY) {
-    console.warn("API_KEY environment variable not set. AI features will not be available.");
+let ai: GoogleGenAI | null = null;
+
+try {
+  // This will throw a ReferenceError if `process` is not defined, which is caught below.
+  const apiKey = process.env.API_KEY;
+  if (apiKey) {
+    ai = new GoogleGenAI({ apiKey: apiKey });
+  } else {
+    console.warn("API_KEY environment variable is not set. AI features will be unavailable.");
+  }
+} catch (e) {
+  // This is the expected path in a browser environment without a build step.
+  console.warn("Could not initialize Gemini AI, likely because process.env.API_KEY is not available. AI features will be disabled.");
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+function getAiInstance(): GoogleGenAI {
+    if (!ai) {
+        throw new Error("خدمة الذكاء الاصطناعي غير متاحة. يرجى التأكد من تهيئة مفتاح API بشكل صحيح.");
+    }
+    return ai;
+}
 
 
 // --- START: Robust API call utility with exponential backoff ---
@@ -119,6 +135,7 @@ const analysisSchema = {
 
 
 export const analyzeIncident = async (incident: IncidentReport): Promise<AnalysisResult> => {
+  const ai = getAiInstance();
   const model = "gemini-2.5-flash";
 
   const prompt = `
@@ -209,6 +226,7 @@ const simulationSchema = {
 };
 
 export const simulateWhatIf = async (incident: IncidentReport, scenario: string): Promise<SimulatedAction[]> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const prompt = `
         بصفتك خبير استراتيجي في إدارة المخاطر والعمليات، قم بإجراء محاكاة "ماذا لو".
@@ -280,6 +298,7 @@ const globalCasesSchema = {
 
 
 export const searchGlobalCases = async (query: string): Promise<GlobalCase[]> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const prompt = `
         بصفتك مستشارًا عالميًا في إدارة المخاطر والتميز التشغيلي، ابحث في قاعدة معارفك الواسعة عن حالات حوادث عالمية وأفضل الممارسات المتعلقة بالاستعلام التالي.
@@ -369,6 +388,7 @@ const predictiveAnalysisSchema = {
 };
 
 export const performPredictiveAnalysis = async (incident: IncidentReport): Promise<PredictiveAnalysisResult> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const prompt = `
         بصفتك محلل مخاطر تنبؤي ومفكر أنظمة من الطراز العالمي، مهمتك هي تحليل تقرير الحادث وتجاوز السبب الجذري المباشر. يجب عليك تحديد الظروف الخفية والكامنة (الإشارات الضعيفة) والتنبؤ بالإخفاقات المستقبلية من خلال تحليل الانحرافات عن الإجراءات القياسية.
@@ -441,6 +461,7 @@ const systemicInsightsSchema = {
 };
 
 export const generateSystemicInsights = async (incidents: IncidentReport[]): Promise<SystemicInsight[]> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const incidentSummaries = incidents
         .filter(inc => inc.analysis) // Only use analyzed incidents
@@ -512,6 +533,7 @@ const deepDiveQuestionsSchema = {
 
 
 export const getDeepDiveQuestions = async (analysis: AnalysisResult): Promise<string[]> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const prompt = `
         بصفتك محققًا خبيرًا في تحليل الأسباب الجذرية، لقد تم تقديم التحليل التالي. مهمتك هي اقتراح 3 أسئلة استكشافية ذكية يمكن أن تكشف عن طبقات أعمق من المشكلة.
@@ -596,6 +618,7 @@ const deepDiveResultSchema = {
 
 
 export const performDeepDive = async (incident: IncidentReport, question: string): Promise<DeepDiveResult> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const prompt = `
         بصفتك محلل أنظمة خبير، قم بالتعمق في الحادث التالي بناءً على السؤال المحدد.
@@ -682,6 +705,7 @@ const alternativeActionSchema = {
 };
 
 export const suggestAlternativeAction = async (incident: IncidentReport, failedAction: Recommendation): Promise<Omit<Recommendation, 'id' | 'status' | 'updates'>> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const prompt = `
         بصفتك مستشارًا خبيرًا في التميز التشغيلي، تم تكليفك بإيجاد حل جديد لمشكلة فشلت فيها محاولة سابقة.
@@ -778,6 +802,7 @@ const recurrenceAnalysisSchema = {
 };
 
 export const detectAndAnalyzeRecurrence = async (targetIncident: IncidentReport, allIncidents: IncidentReport[]): Promise<RecurrenceInfo> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const otherIncidentsSummary = allIncidents
         .filter(inc => inc.id !== targetIncident.id)
@@ -898,6 +923,7 @@ const metaRecsSchema = {
 export const generateMetaRecommendations = async (
     recurringIncidents: IncidentReport[]
 ): Promise<{ failurePatternAnalysis: string; metaRecommendations: Omit<Recommendation, 'id' | 'status' | 'updates'>[] }> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
 
     const incidentSummaries = recurringIncidents.map(inc => {
@@ -1005,6 +1031,7 @@ const dashboardBriefingSchema = {
 };
 
 export const getDashboardBriefing = async (incidents: IncidentReport[]): Promise<DashboardBriefing> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const incidentSummaries = incidents.map(inc => `ID: ${inc.id}, العنوان: ${inc.title}, السبب: ${inc.analysis?.rootCause.cause}, الخطورة: ${inc.severity}, القسم: ${inc.department}`).join('\n');
     
@@ -1108,6 +1135,7 @@ const managerialInsightsSchema = {
 };
 
 export const getManagerialInsights = async (incidents: IncidentReport[]): Promise<ManagerialInsight[]> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const contextSummary = incidents.map(inc => `ID: ${inc.id}, العنوان: ${inc.title}, الحالة: ${inc.status}, الخطورة: ${inc.severity}, السبب: ${inc.analysis?.rootCause.cause || 'N/A'}`).join('\n');
     const prompt = `
@@ -1152,6 +1180,7 @@ const trainingModuleSchema = {
 };
 
 export const generateTrainingContent = async (incident: IncidentReport): Promise<TrainingModule> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const prompt = `
         بصفتك مصممًا تعليميًا، قم بإنشاء محتوى تدريبي مصغر (micro-learning) بناءً على تحليل الحادث التالي، خاصة سبب فشل الحلول السابقة.
@@ -1198,6 +1227,7 @@ export const extractIncidentDetailsFromAttachment = async (
   mimeType: string,
   userContext: string // Optional text from description field
 ): Promise<Partial<IncidentReport>> => {
+  const ai = getAiInstance();
   const model = "gemini-2.5-flash";
 
   const filePart = {
@@ -1280,6 +1310,7 @@ export const generateImplementationPlan = async (
     recommendation: Recommendation,
     relevantCases: GlobalCase[]
 ): Promise<{ tools: { name: string; description: string }[]; scenario: string; }> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const relevantCasesSummary = relevantCases.length > 0 
         ? `للمعلومية، تم العثور على الحالات العالمية التالية التي قد تكون ذات صلة. استفد من الدروس المستفادة منها عند إنشاء السيناريو:\n${JSON.stringify(relevantCases, null, 2)}`
@@ -1357,6 +1388,7 @@ const fiveWhysSchema = {
 };
 
 export const perform5WhysAnalysis = async (incident: IncidentReport): Promise<FiveWhysAnalysis> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const problem = incident.analysis?.rootCause?.cause || incident.title;
 
@@ -1440,6 +1472,7 @@ const fishboneSchema = {
 };
 
 export const performFishboneAnalysis = async (incident: IncidentReport): Promise<FishboneAnalysis> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const problem = incident.analysis?.rootCause?.cause || incident.title;
 
@@ -1524,6 +1557,7 @@ const paretoSchema = {
 };
 
 export const performParetoAnalysis = async (incidents: IncidentReport[]): Promise<ParetoAnalysis> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
 
     const analyzableIncidents = incidents.filter(inc => inc.analysis?.rootCause?.cause);
@@ -1606,6 +1640,7 @@ const fmeaSchema = {
 };
 
 export const performFmeaAnalysis = async (incident: IncidentReport): Promise<FmeaAnalysis> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const problem = incident.analysis?.rootCause?.cause || incident.title;
 
@@ -1678,6 +1713,7 @@ const faultTreeSchema = {
 };
 
 export const performFaultTreeAnalysis = async (incident: IncidentReport): Promise<FaultTreeAnalysis> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const topEventDescription = incident.analysis?.rootCause?.cause || incident.title;
     const prompt = `
@@ -1745,6 +1781,7 @@ const pokaYokeSchema = {
 };
 
 export const performPokaYokeAnalysis = async (incident: IncidentReport): Promise<PokaYokeAnalysis> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const problem = incident.analysis?.rootCause?.cause || incident.title;
     const prompt = `
@@ -1805,6 +1842,7 @@ const dmaicSchema = {
 };
 
 export const performDmaicAnalysis = async (incident: IncidentReport): Promise<DmaicAnalysis> => {
+    const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const problem = incident.analysis?.rootCause?.cause || incident.title;
     const prompt = `
