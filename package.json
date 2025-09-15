@@ -12,10 +12,9 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "@google/genai": "^1.12.0",
-    "chart.js/auto": "latest",
+    "chart.js": "^4.5.0",
     "jspdf": "2.5.1",
-    "html2canvas": "1.4.1",
-    "chart.js": "^4.5.0"
+    "html2canvas": "1.4.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

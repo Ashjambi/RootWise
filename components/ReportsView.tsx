@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { IncidentReport, IncidentSeverity } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
-import { Chart } from "chart.js/auto";
+import { Chart } from "chart.js";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
