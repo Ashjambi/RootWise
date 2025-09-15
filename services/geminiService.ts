@@ -10,8 +10,11 @@ import {
     FaultTreeAnalysis,
     PokaYokeAnalysis,
     DmaicAnalysis,
-    RecommendationType,
-    FaultTreeEvent
+    FaultTreeEvent,
+    SopComplianceAnalysis,
+    SopComparisonResult,
+    ExtractedProcedure,
+    MindMapNode
 } from '../types';
 
 let ai: GoogleGenAI | null = null;
@@ -90,8 +93,9 @@ const analysisSchema = {
         expectedProcedure: { type: Type.STRING, description: "ما كان يجب أن يحدث وفقًا للإجراءات التشغيلية القياسية." },
         actualAction: { type: Type.STRING, description: "ما حدث بالفعل أثناء الحادث." },
         gapAnalysis: { type: Type.STRING, description: "شرح للانحراف وسبب أهميته." },
+        sopReference: { type: Type.STRING, description: "المرجع المحدد في الدليل الرسمي (SOP) الذي تم الانحراف عنه (مثال: 'صفحة 7، بند 4.1.2'). إذا لم يتم العثور على مرجع، استخدم 'غير محدد'." }
       },
-      required: ["expectedProcedure", "actualAction", "gapAnalysis"],
+      required: ["expectedProcedure", "actualAction", "gapAnalysis", "sopReference"],
     },
     roleTree: {
         type: Type.ARRAY,
@@ -112,7 +116,7 @@ const analysisSchema = {
       items: {
         type: Type.OBJECT,
         properties: {
-          type: { type: Type.STRING, enum: ['إجراء تصحيحي', 'إجراء وقائي'], description: "تصنيف الإجراء: 'تصحيحي' لمعالجة سبب مباشر للحادث، أو 'وقائي' لمنع مشكلة مستقبلية محتملة." },
+          actionType: { type: Type.STRING, enum: ['تصحيحي', 'وقائي'], description: "نوع الإجراء: 'تصحيحي' لمعالجة المشكلة المباشرة، أو 'وقائي' لمنع التكرار المستقبلي." },
           category: { type: Type.STRING, enum: Object.values(RecommendationCategory).filter(c => c !== RecommendationCategory.Simulation), description: "فئة التوصية." },
           action: { type: Type.STRING, description: "الإجراء المحدد الموصى باتخاذه." },
           impact: { type: Type.STRING, description: "التأثير الإيجابي المتوقع من تنفيذ هذا الإجراء." },
@@ -121,7 +125,7 @@ const analysisSchema = {
           cost: { type: Type.STRING, enum: ['منخفض', 'متوسط', 'مرتفع'], description: "التكلفة التقديرية للتنفيذ." },
           timeframe: { type: Type.STRING, description: "الإطار الزمني المتوقع للتنفيذ (مثال: 'أسبوع واحد', '3 أشهر')." },
         },
-        required: ["type", "category", "action", "impact", "rationale", "ease", "cost", "timeframe"],
+        required: ["actionType", "category", "action", "impact", "rationale", "ease", "cost", "timeframe"],
       },
     },
     knowledgeCapsule: {
@@ -137,6 +141,83 @@ export const analyzeIncident = async (incident: IncidentReport): Promise<Analysi
   const ai = getAiInstance();
   const model = "gemini-2.5-flash";
 
+  let sopContext: string;
+  let sopGapInstruction: string;
+  let recommendationsInstruction: string;
+
+  if (incident.sopComplianceAnalysis) {
+      sopContext = `
+          لقد تم بالفعل إجراء تحليل توافق مع الدليل التشغيلي الرسمي (SOP). استخدم الملخص التالي كمرجع أساسي ومصدر للحقيقة عند بناء تحليلك.
+          **ملخص تحليل التوافق:**
+          - درجة التوافق الإجمالية: ${incident.sopComplianceAnalysis.overallComplianceScore}%
+          - ملخص تنفيذي: ${incident.sopComplianceAnalysis.summary}
+          - تفاصيل الانحرافات الرئيسية والإجراءات المقترحة من تحليل التوافق:
+          ${incident.sopComplianceAnalysis.steps
+              .filter(s => s.complianceStatus !== 'Compliant' && s.complianceStatus !== 'Not-Applicable')
+              .map(s => `  - الخطوة: "${s.procedureStep}" (المرجع: ${s.sopReference || 'غير محدد'}). الانحراف: ${s.deviationAnalysis}. الإجراء التصحيحي المقترح: ${s.recommendedCorrectiveAction}. الإجراء الوقائي المقترح: ${s.recommendedPreventiveAction}.`)
+              .join('\n') || 'لم يتم العثور على انحرافات رئيسية.'
+          }
+      `;
+      sopGapInstruction = `
+    2.  **تحليل فجوة إجراءات التشغيل القياسية (SOP) - تعليمات دقيقة:**
+        - **مهمتك:** وصف الانحراف الرئيسي عن الإجراءات الموحدة.
+        - **المصدر:** استخدم **فقط** "تفاصيل الانحرافات الرئيسية" التي تم تزويدك بها.
+        - **ملء الحقول:**
+            - **expectedProcedure:** صف الإجراء المتوقع. **يجب ألا يحتوي هذا الحقل على أي أرقام بنود أو صفحات.**
+            - **actualAction:** صف الإجراء الفعلي.
+            - **gapAnalysis:** حلل الفجوة وأثرها. **يجب ألا يحتوي هذا الحقل على أي أرقام بنود أو صفحات.**
+            - **sopReference:** **هذا هو المكان الوحيد للمرجع.** انسخ قيمة "المرجع" (مثال: 'صفحة 7، بند 4.1.2') من سياق تحليل التوافق والصقها هنا كما هي.
+        - **قاعدة حاسمة وغير قابلة للتفاوض:** أي ذكر لأرقام الصفحات، البنود، الأقسام، أو أي شكل من أشكال المراجع داخل حقول \`expectedProcedure\` أو \`gapAnalysis\` يعتبر خطأ فادحًا وسيؤدي إلى رفض الإجابة. يجب أن تكون هذه الحقول نصًا وصفيًا نقيًا. المرجع يوضع **فقط وحصريًا** في حقل \`sopReference\`.
+        - **مثال على الخطأ الذي يجب تجنبه:**
+          - \`gapAnalysis\`: "حدث الانحراف لأن الفني لم يتبع البند 3.4 في الصفحة 12." (خطأ)
+        - **مثال على الصواب:**
+          - \`gapAnalysis\`: "حدث الانحراف لأن الفني لم يقم بإجراء فحص المعايرة المطلوب قبل بدء العملية." (صحيح)
+          - \`sopReference\`: "صفحة 12، بند 3.4" (صحيح)
+    `;
+      recommendationsInstruction = `
+    4.  **التوصيات (CAPAs) - قاعدة إلزامية:** هذه هي المهمة الأكثر أهمية. مصدرك **الوحيد** لإنشاء التوصيات هو "تفاصيل الانحرافات الرئيسية" التي تم تزويدك بها.
+        - **الخطوة 1: تحويل كل إجراء مقترح:** لكل انحراف مذكور في السياق، ستجد "إجراء تصحيحي مقترح" و "إجراء وقائي مقترح". يجب عليك تحويل **كل واحد منهما** إلى عنصر منفصل في مصفوفة \`recommendations\`.
+        - **الخطوة 2: التصنيف الصحيح:**
+            - عند تحويل "إجراء تصحيحي مقترح"، يجب أن يكون \`actionType\` هو **'تصحيحي'**.
+            - عند تحويل "إجراء وقائي مقترح"، يجب أن يكون \`actionType\` هو **'وقائي'**.
+        - **قاعدة حاسمة:** لا تقم بدمج الإجراءين في توصية واحدة. يجب أن يكون الناتج النهائي قائمة من التوصيات الفردية، وكل منها إما تصحيحي أو وقائي بشكل واضح.
+        - **محتوى التوصية:**
+            - **action:** يجب أن يكون هذا هو نص الإجراء المقترح (التصحيحي أو الوقائي) الذي تقوم بتحويله.
+            - **rationale:** اشرح كيف أن هذا الإجراء يعالج المشكلة. اذكر مرجع الدليل (SOP reference) المرتبط بالانحراف.
+            - **باقي الحقول (category, impact, ease, cost, timeframe):** املأها بناءً على فهمك للإجراء.
+    `;
+
+  } else {
+      if (incident.sopDocument) {
+          sopContext = "لقد تم إرفاق الدليل التشغيلي الرسمي (SOP) مع هذا الطلب. يجب أن يكون هذا الدليل هو المرجع الأساسي والمصدر الوحيد للحقيقة عند إجراء التحليل. قم بتحليل فجوة الإجراءات والتوصيات بناءً عليه.";
+      } else {
+          sopContext = "لم يتم إرفاق دليل تشغيلي رسمي، قم بالتحليل بناءً على المعلومات المقدمة وأفضل الممارسات العامة.";
+      }
+      sopGapInstruction = `
+    2.  **تحليل فجوة إجراءات التشغيل القياسية (SOP) - تعليمات دقيقة:**
+        - **مهمتك:** قارن بين الإجراءات القياسية وما حدث بالفعل.
+        - **تحديد المرجع:**
+            - **sopReference:** ابحث في الدليل المرفق عن المرجع الدقيق (مثال: 'صفحة 7، بند 4.1.2') وضعه هنا. هذا الحقل **إلزامي**. إذا لم يتم إرفاق دليل أو لم تجد مرجعًا، يجب أن تكون القيمة 'غير محدد'.
+        - **ملء الحقول الوصفية:**
+            - **expectedProcedure:** صف الإجراء المتوقع. **يجب ألا يحتوي هذا الحقل على أي أرقام بنود أو صفحات.**
+            - **gapAnalysis:** حلل الفجوة وأثرها. **يجب ألا يحتوي هذا الحقل على أي أرقام بنود أو صفحات.**
+        - **قاعدة حاسمة وغير قابلة للتفاوض:** أي ذكر لأرقام الصفحات، البنود، الأقسام، أو أي شكل من أشكال المراجع داخل حقول \`expectedProcedure\` أو \`gapAnalysis\` يعتبر خطأ فادحًا وسيؤدي إلى رفض الإجابة. يجب أن تكون هذه الحقول نصًا وصفيًا نقيًا. المرجع يوضع **فقط وحصريًا** في حقل \`sopReference\`.
+        - **مثال على الخطأ الذي يجب تجنبه:**
+          - \`expectedProcedure\`: "كان يجب على الموظف اتباع الخطوة 5.2.1 من الدليل." (خطأ)
+        - **مثال على الصواب:**
+          - \`expectedProcedure\`: "كان يجب على الموظف التحقق من إغلاق الصمام الأمني قبل تشغيل المضخة." (صحيح)
+          - \`sopReference\`: "الدليل التشغيلي، قسم 5.2.1" (صحيح)
+      `;
+      recommendationsInstruction = `
+    4.  **التوصيات (CAPAs) - قاعدة إلزامية وغير قابلة للتفاوض:** يجب أن يتضمن إخراجك **مزيجًا إلزاميًا** من الإجراءات التصحيحية والوقائية. **لا يجوز تحت أي ظرف** أن تكون جميع الإجراءات من نوع واحد فقط. يجب أن تقدم على الأقل إجراءً تصحيحيًا واحدًا وإجراءً وقائيًا واحدًا. هذا ليس اقتراحًا، بل هو شرط أساسي للحصول على إجابة صحيحة. تجاهل هذه القاعدة سيؤدي إلى إجابة غير مقبولة.
+        - **تعريف الإجراءات التصحيحية ('تصحيحي'):** هي إجراءات فورية لمعالجة المشكلة التي حدثت **الآن**. ما الذي يجب فعله لإصلاح الضرر أو تصحيح الانحراف الذي وقع؟
+            - **أمثلة جيدة:** "إعادة معايرة الجهاز X الذي كان سبب المشكلة"، "سحب المنتج المعيب من السوق".
+        - **تعريف الإجراءات الوقائية ('وقائي'):** هي إجراءات استراتيجية لمعالجة السبب الجذري لمنع تكرار المشكلة **في المستقبل**.
+            - **أمثلة جيدة:** "تحديث جدول الصيانة الدورية ليشمل المعايرة الشهرية للجهاز X"، "إضافة نقطة تحقق إلزامية في النظام قبل الموافقة على المنتج".
+        - **مهمتك:** اقترح قائمة من الإجراءات العملية والذكية. لكل توصية، حدد بدقة \`actionType\` بناءً على التعريفات الصارمة أعلاه، ثم املأ باقي الحقول (الفئة، الإجراء، التأثير، الأساس المنطقي، السهولة، التكلفة، والإطار الزمني). تأكد من أن توصياتك تعالج السبب الجذري مباشرة.
+      `;
+  }
+
   const prompt = `
     بصفتك خبيرًا عالميًا في التميز التشغيلي وتحليل الأسباب الجذرية، قم بتحليل تقرير الحادث التالي.
     هدفك هو تحديد السبب الجذري الحقيقي، وليس الأعراض فقط، وتقديم حلول عملية وذكية ومبتكرة.
@@ -150,25 +231,39 @@ export const analyzeIncident = async (incident: IncidentReport): Promise<Analysi
     - **الخطورة:** ${incident.severity}
     - **الإجراء الفوري المتخذ:** ${incident.immediateAction}
     - **الأفراد/الأدوار المعنية:** ${incident.involvedPersonnel}
+    
+    **تعليمات خاصة:**
+    ${sopContext}
 
     **مهمتك:**
     قدم تحليلاً شاملاً بصيغة JSON بناءً على المخطط المحدد.
     1.  **تحليل السبب الجذري:** تجاوز ما هو واضح. لماذا حدث الفشل الأولي؟ ما هي نقطة الضعف الأساسية في النظام أو العملية التي سمحت بحدوث ذلك؟ ابحث عن الأسباب الكامنة.
-    2.  **تحليل فجوة إجراءات التشغيل القياسية (SOP):** افترض وجود إجراء تشغيل قياسي لهذه المهمة. قارن الإجراء الصحيح المحتمل بما حدث بالفعل. حدد الفجوة.
+${sopGapInstruction}
     3.  **تحليل شجرة الأدوار:** حلل الأدوار المعنية. ماذا كانت مسؤولية كل دور وكيف ساهمت أفعالهم (أو تقاعسهم) في النتيجة؟ قدم هذا كتحليل للنظام، وليس لومًا فرديًا.
-    4.  **التوصيات (CAPAs):** اقترح إجراءات تصحيحية ووقائية ذكية ومبتكرة. صنف كل توصية بوضوح إما كـ 'إجراء تصحيحي' أو 'إجراء وقائي'. اشرح لماذا كل توصية ضرورية.
+${recommendationsInstruction}
     5.  **كبسولة معرفية:** لخص النقطة الأساسية في "كبسولة معرفية" غنية بالمعلومات وقابلة للاستخدام للتدريب المستقبلي ومنع تكرار المشكلة.
   `;
+    
+  let contents: string | { parts: any[] };
+
+  if (incident.sopDocument?.content && !incident.sopComplianceAnalysis) {
+      contents = {
+          parts: [
+              { inlineData: { data: incident.sopDocument.content, mimeType: incident.sopDocument.mimeType } },
+              { text: prompt }
+          ]
+      };
+  } else {
+      contents = prompt;
+  }
 
   try {
     const response = await callGeminiWithRetry(() => ai.models.generateContent({
       model: model,
-      contents: prompt,
+      contents: contents,
       config: {
         responseMimeType: "application/json",
         responseSchema: analysisSchema,
-        maxOutputTokens: 8192,
-        thinkingConfig: { thinkingBudget: 4096 },
       }
     }));
     
@@ -252,8 +347,6 @@ export const simulateWhatIf = async (incident: IncidentReport, scenario: string)
             config: {
                 responseMimeType: "application/json",
                 responseSchema: simulationSchema,
-                maxOutputTokens: 2048,
-                thinkingConfig: { thinkingBudget: 1024 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -318,8 +411,6 @@ export const searchGlobalCases = async (query: string): Promise<GlobalCase[]> =>
             config: {
                 responseMimeType: "application/json",
                 responseSchema: globalCasesSchema,
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 },
             }
         }));
         
@@ -405,7 +496,7 @@ export const performPredictiveAnalysis = async (incident: IncidentReport): Promi
 
         1.  **الإشارات الضعيفة (المؤثرات الخفية):** حدد 2-3 "إشارات ضعيفة" معقولة كانت موجودة على الأرجح في البيئة التشغيلية *قبل* وقوع الحادث. هذه ليست السبب الجذري بحد ذاته، بل هي نذائر خفية. لكل إشارة، اشرح دلالتها المحتملة.
         2.  **أنماط الانحراف عن الإجراءات:** بناءً على فجوة الإجراءات المحددة، استقرئ انحرافات أخرى محتملة وغير مسجلة أو "حلول بديلة" قد تستخدمها الفرق. صف النمط والخطر الذي يمثله.
-        3.  **رؤى تنبؤية:** بناءً على الإشارات وأنماط الانحراف، قدم 1-2 تنبؤات ملموسة للحوادث المحتملة *المستقبلية*. لكل تنبؤ، برره بناءً على تحليلك، وقدم توصية استباقية عالية التأثير لمنعه. هذا هو الجزء الأكثر أهمية في تحليلك.
+        3.  **رؤى تنبؤية:** بناءً على الإشارات وأنماط الانحراف، قدم 1-2 تنبؤات ملموسة للحوادث المحتملة *المستقبلية*. لكل تنبؤ, برره بناءً على تحليلك، وقدم توصية استباقية عالية التأثير لمنعه. هذا هو الجزء الأكثر أهمية في تحليلك.
     `;
 
     try {
@@ -415,8 +506,6 @@ export const performPredictiveAnalysis = async (incident: IncidentReport): Promi
             config: {
                 responseMimeType: "application/json",
                 responseSchema: predictiveAnalysisSchema,
-                maxOutputTokens: 8192,
-                thinkingConfig: { thinkingBudget: 4096 },
             }
         }));
         
@@ -488,8 +577,6 @@ export const generateSystemicInsights = async (incidents: IncidentReport[]): Pro
             config: {
                 responseMimeType: "application/json",
                 responseSchema: systemicInsightsSchema,
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 },
             }
         }));
         
@@ -556,8 +643,6 @@ export const getDeepDiveQuestions = async (analysis: AnalysisResult): Promise<st
             config: {
                 responseMimeType: "application/json",
                 responseSchema: deepDiveQuestionsSchema,
-                maxOutputTokens: 1024,
-                thinkingConfig: { thinkingBudget: 512 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -599,7 +684,7 @@ const deepDiveResultSchema = {
             items: {
                 type: Type.OBJECT,
                 properties: {
-                  type: { type: Type.STRING, enum: ['إجراء تصحيحي', 'إجراء وقائي'], description: "تصنيف الإجراء: 'تصحيحي' لمعالجة سبب مباشر للحادث، أو 'وقائي' لمنع مشكلة مستقبلية محتملة." },
+                  actionType: { type: Type.STRING, enum: ['تصحيحي', 'وقائي'], description: "نوع الإجراء." },
                   category: { type: Type.STRING, enum: Object.values(RecommendationCategory).filter(c => c !== RecommendationCategory.Simulation), description: "فئة التوصية." },
                   action: { type: Type.STRING, description: "الإجراء المحدد الموصى باتخاذه." },
                   impact: { type: Type.STRING, description: "التأثير الإيجابي المتوقع." },
@@ -608,7 +693,7 @@ const deepDiveResultSchema = {
                   cost: { type: Type.STRING, enum: ['منخفض', 'متوسط', 'مرتفع'], description: "التكلفة التقديرية." },
                   timeframe: { type: Type.STRING, description: "الإطار الزمني للتنفيذ." },
                 },
-                required: ["type", "category", "action", "impact", "rationale", "ease", "cost", "timeframe"],
+                required: ["actionType", "category", "action", "impact", "rationale", "ease", "cost", "timeframe"],
             },
         }
     },
@@ -632,7 +717,7 @@ export const performDeepDive = async (incident: IncidentReport, question: string
 
         **مهمتك:**
         1.  قدم إجابة مفصلة ومعمقة على السؤال المطروح، واكشف عن رؤى جديدة.
-        2.  بناءً على هذه الرؤية الجديدة، اقترح 1-2 توصيات عملية وملموسة لم تكن موجودة في التحليل الأولي.
+        2.  بناءً على هذه الرؤية الجديدة، اقترح 1-2 توصيات عملية وملموسة لم تكن موجودة في التحليل الأولي. **قاعدة إلزامية:** يجب أن تقدم مزيجًا من الإجراءات التصحيحية (لحل المشكلة المباشرة) والوقائية (لمنع التكرار المستقبلي) إن أمكن.
         3.  أرجع إجابتك **حصريًا** بصيغة JSON بناءً على المخطط المحدد.
     `;
      try {
@@ -642,8 +727,6 @@ export const performDeepDive = async (incident: IncidentReport, question: string
             config: {
                 responseMimeType: "application/json",
                 responseSchema: deepDiveResultSchema,
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 },
             }
         }));
         
@@ -688,7 +771,7 @@ const alternativeActionSchema = {
             type: Type.OBJECT,
             description: "توصية جديدة وبديلة من المرجح أن تنجح.",
             properties: {
-                type: { type: Type.STRING, enum: ['إجراء تصحيحي', 'إجراء وقائي'], description: "تصنيف الإجراء: 'تصحيحي' لمعالجة سبب مباشر للحادث، أو 'وقائي' لمنع مشكلة مستقبلية محتملة." },
+                actionType: { type: Type.STRING, enum: ['تصحيحي', 'وقائي'], description: "نوع الإجراء." },
                 category: { type: Type.STRING, enum: Object.values(RecommendationCategory).filter(c => c !== RecommendationCategory.Simulation), description: "فئة التوصية." },
                 action: { type: Type.STRING, description: "الإجراء المحدد الموصى به." },
                 impact: { type: Type.STRING, description: "التأثير الإيجابي المتوقع لهذا الإجراء." },
@@ -697,7 +780,7 @@ const alternativeActionSchema = {
                 cost: { type: Type.STRING, enum: ['منخفض', 'متوسط', 'مرتفع'], description: "التكلفة التقديرية للتنفيذ." },
                 timeframe: { type: Type.STRING, description: "الإطار الزمني المتوقع للتنفيذ (مثال: 'أسبوع واحد', '3 أشهر')." },
             },
-            required: ["type", "category", "action", "impact", "rationale", "ease", "cost", "timeframe"],
+            required: ["actionType", "category", "action", "impact", "rationale", "ease", "cost", "timeframe"],
         }
     },
     required: ["newRecommendation"],
@@ -717,13 +800,17 @@ export const suggestAlternativeAction = async (incident: IncidentReport, failedA
         **التوصية التي فشلت:**
         - **الإجراء:** ${failedAction.action}
         - **الأساس المنطقي:** ${failedAction.rationale}
+        - **الفئة:** ${failedAction.category}
         - **سبب الفشل (إن وجد):** ${failedAction.effectivenessNotes || 'غير محدد، ولكن تم وضع علامة "غير فعال" عليه.'}
 
         **مهمتك:**
-        حلل سبب فشل التوصية السابقة واقترح **توصية بديلة جديدة ومختلفة وعملية**.
-        يجب أن يعالج الاقتراح الجديد السبب الجذري الأصلي ولكن من زاوية مختلفة أو بنهج مختلف.
-        تأكد من أن التوصية المقترحة جديدة وليست تكرارًا لتوصيات موجودة بالفعل في سياق الحادث.
-        قدم إجابتك **حصريًا** بصيغة JSON صالحة بناءً على المخطط المحدد. لا تقم بتضمين أي نص أو تفسير خارج كائن JSON.
+        1.  حلل سبب فشل التوصية السابقة. لماذا لم ينجح إجراء من فئة "${failedAction.category}"؟ هل كان المحتوى ضعيفًا، أم أن المشكلة أعمق من ذلك؟
+        2.  اقترح **توصية بديلة جديدة ومختلفة وعملية**.
+        3.  **قاعدة الأولوية:** يجب أن تعطي الأولوية لاقتراح توصية بديلة **من نفس الفئة** ('${failedAction.category}'). على سبيل المثال، إذا فشل إجراء تدريبي، اقترح إجراء تدريبيًا أفضل (مثل تدريب عملي بدلاً من نظري).
+        4.  **الاستثناء:** لا تقترح إجراءً من فئة مختلفة إلا إذا كنت تعتقد اعتقادًا راسخًا أن الفئة الأصلية خاطئة تمامًا لمعالجة السبب الجذري. إذا قمت بذلك، يجب أن تشرح في حقل 'rationale' لماذا يعتبر تغيير الفئة ضروريًا.
+        5.  يجب أن يعالج الاقتراح الجديد السبب الجذري الأصلي ولكن بنهج أفضل.
+        6.  تأكد من أن التوصية المقترحة جديدة وليست تكرارًا لتوصيات موجودة بالفعل في سياق الحادث.
+        7.  قدم إجابتك **حصريًا** بصيغة JSON صالحة بناءً على المخطط المحدد. لا تقم بتضمين أي نص أو تفسير خارج كائن JSON.
     `;
 
     try {
@@ -733,8 +820,6 @@ export const suggestAlternativeAction = async (incident: IncidentReport, failedA
             config: {
                 responseMimeType: "application/json",
                 responseSchema: alternativeActionSchema,
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -860,8 +945,6 @@ export const detectAndAnalyzeRecurrence = async (targetIncident: IncidentReport,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: recurrenceAnalysisSchema,
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -902,7 +985,7 @@ const metaRecsSchema = {
             items: {
                 type: Type.OBJECT,
                 properties: {
-                    type: { type: Type.STRING, enum: ['إجراء تصحيحي', 'إجراء وقائي'], description: "تصنيف الإجراء. الإجراءات الاستراتيجية غالبًا ما تكون 'وقائية'." },
+                    actionType: { type: Type.STRING, enum: ['تصحيحي', 'وقائي'], description: "نوع الإجراء." },
                     category: { type: Type.STRING, enum: [RecommendationCategory.Strategic, RecommendationCategory.Technical, RecommendationCategory.Procedural], description: `فئة التوصية. استخدم '${RecommendationCategory.Strategic}' للإجراءات التي تغير السياسات أو الاستراتيجيات.` },
                     action: { type: Type.STRING, description: "الإجراء الاستراتيجي المحدد الموصى به." },
                     impact: { type: Type.STRING, description: "التأثير الإيجابي المتوقع من تنفيذ هذا الإجراء الاستراتيجي." },
@@ -911,7 +994,7 @@ const metaRecsSchema = {
                     cost: { type: Type.STRING, enum: ['منخفض', 'متوسط', 'مرتفع'], description: "التكلفة التقديرية للتنفيذ." },
                     timeframe: { type: Type.STRING, description: "الإطار الزمني المتوقع للتنفيذ." },
                 },
-                required: ["type", "category", "action", "impact", "rationale", "ease", "cost", "timeframe"],
+                required: ["actionType", "category", "action", "impact", "rationale", "ease", "cost", "timeframe"],
             },
         }
     },
@@ -956,7 +1039,7 @@ export const generateMetaRecommendations = async (
             -   بناءً على تحليلك لنمط الفشل، اقترح 1-3 توصيات **جديدة واستراتيجية**.
             -   يجب أن تكون هذه التوصيات مصممة لكسر حلقة التكرار من جذورها.
             -   تجنب تكرار الحلول السابقة. فكر في: إعادة تصميم العمليات، تغييرات في النظام، بروتوكولات تدريب جديدة، تعديل مؤشرات الأداء.
-            -   صنف هذه الإجراءات الجديدة كـ '${RecommendationCategory.Strategic}' إن أمكن، وحدد نوعها (غالبًا ما تكون 'إجراء وقائي').
+            -   صنف هذه الإجراءات الجديدة كـ '${RecommendationCategory.Strategic}' إن أمكن.
 
         أرجع إجابتك **حصريًا** بتنسيق JSON بناءً على المخطط المحدد.
     `;
@@ -968,8 +1051,6 @@ export const generateMetaRecommendations = async (
             config: {
                 responseMimeType: "application/json",
                 responseSchema: metaRecsSchema,
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 },
             }
         }));
 
@@ -1094,8 +1175,6 @@ export const getDashboardBriefing = async (incidents: IncidentReport[]): Promise
             config: { 
                 responseMimeType: "application/json", 
                 responseSchema: dashboardBriefingSchema, 
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 }
             } 
         }));
         const jsonText = response.text?.trim();
@@ -1109,54 +1188,6 @@ export const getDashboardBriefing = async (incidents: IncidentReport[]): Promise
     } catch (error) {
         console.error("خطأ في إنشاء الموجز الاستخباري:", error);
         throw new Error(`فشل في إنشاء الموجز الاستخباري. ${error}`);
-    }
-};
-
-const managerialInsightsSchema = {
-    type: Type.OBJECT,
-    properties: {
-        insights: {
-            type: Type.ARRAY,
-            description: "قائمة بأفضل 3 قرارات للمدير.",
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    title: { type: Type.STRING, description: "عنوان القرار." },
-                    recommendation: { type: Type.STRING, description: "وصف القرار المقترح." },
-                    rationale: { type: Type.STRING, description: "لماذا هذا القرار مهم الآن." },
-                    priority: { type: Type.STRING, enum: ['عاجل', 'هام', 'استراتيجي'], description: "أولوية القرار." }
-                },
-                required: ["title", "recommendation", "rationale", "priority"]
-            }
-        }
-    },
-    required: ["insights"]
-};
-
-export const getManagerialInsights = async (incidents: IncidentReport[]): Promise<ManagerialInsight[]> => {
-    const ai = getAiInstance();
-    const model = "gemini-2.5-flash";
-    const contextSummary = incidents.map(inc => `ID: ${inc.id}, العنوان: ${inc.title}, الحالة: ${inc.status}, الخطورة: ${inc.severity}, السبب: ${inc.analysis?.rootCause.cause || 'N/A'}`).join('\n');
-    const prompt = `
-        بصفتك مساعدًا ذكيًا للمدير التنفيذي (AI Coach)، قم بتحليل الوضع التشغيلي الحالي بناءً على قائمة الحوادث.
-        
-        **ملخص الوضع:**
-        ${contextSummary}
-
-        **مهمتك:**
-        حدد أفضل 3 قرارات ذات أولوية يمكن للمدير اتخاذها اليوم أو هذا الأسبوع لمعالجة أكبر المخاطر أو الفرص.
-        يجب أن تكون القرارات عملية وقابلة للتنفيذ.
-        قدم إجابتك **حصريًا** بصيغة JSON.
-    `;
-    try {
-        const response = await callGeminiWithRetry(() => ai.models.generateContent({ model, contents: prompt, config: { responseMimeType: "application/json", responseSchema: managerialInsightsSchema, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 1024 } } }));
-        const jsonText = response.text?.trim();
-        if (!jsonText) throw new Error("لم يتم إنشاء رؤى إدارية.");
-        let parsableText = jsonText.startsWith('```json') ? jsonText.substring(7, jsonText.length - 3).trim() : jsonText;
-        return JSON.parse(parsableText).insights || [];
-    } catch (error) {
-        console.error("خطأ في مساعد المدير الذكي:", error);
-        throw new Error(`فشل إنشاء الرؤى الإدارية. ${error}`);
     }
 };
 
@@ -1198,7 +1229,7 @@ export const generateTrainingContent = async (incident: IncidentReport): Promise
         5. قدم إجابتك **حصريًا** بصيغة JSON.
     `;
     try {
-        const response = await callGeminiWithRetry(() => ai.models.generateContent({ model, contents: prompt, config: { responseMimeType: "application/json", responseSchema: trainingModuleSchema, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 1024 } } }));
+        const response = await callGeminiWithRetry(() => ai.models.generateContent({ model, contents: prompt, config: { responseMimeType: "application/json", responseSchema: trainingModuleSchema } }));
         const jsonText = response.text?.trim();
         if (!jsonText) throw new Error("لم يتم إنشاء محتوى تدريبي.");
         let parsableText = jsonText.startsWith('```json') ? jsonText.substring(7, jsonText.length - 3).trim() : jsonText;
@@ -1258,8 +1289,6 @@ export const extractIncidentDetailsFromAttachment = async (
       config: {
         responseMimeType: "application/json",
         responseSchema: incidentExtractionSchema,
-        maxOutputTokens: 2048,
-        thinkingConfig: { thinkingBudget: 1024 },
       }
     }));
 
@@ -1315,6 +1344,16 @@ export const generateImplementationPlan = async (
         ? `للمعلومية، تم العثور على الحالات العالمية التالية التي قد تكون ذات صلة. استفد من الدروس المستفادة منها عند إنشاء السيناريو:\n${JSON.stringify(relevantCases, null, 2)}`
         : "لم يتم العثور على حالات عالمية مشابهة بشكل مباشر، لذا اعتمد على خبرتك العامة وأفضل الممارسات.";
 
+    let sopContext: string;
+    if (incident.sopComplianceAnalysis) {
+        const summary = incident.sopComplianceAnalysis.summary;
+        sopContext = `**مرجع إلزامي:** لقد تم تحليل الدليل التشغيلي الرسمي (SOP) مسبقًا. تأكد من أن خطة التنفيذ المقترحة تتوافق مع هذا التحليل أو تقترح تعديلاً عليه. ملخص التحليل: "${summary}"`;
+    } else if (incident.sopDocument) {
+        sopContext = "**مرجع إلزامي:** لقد تم تزويدك بالدليل التشغيلي الرسمي (SOP). تأكد من أن خطة التنفيذ المقترحة تتوافق مع هذا الدليل أو تقترح تعديلاً عليه بشكل صريح كجزء من الحل.";
+    } else {
+        sopContext = "";
+    }
+
     const prompt = `
         بصفتك خبير استراتيجي في التنفيذ والتميز التشغيلي، تم تكليفك بإنشاء خطة مساعدة لتنفيذ التوصية التالية.
 
@@ -1322,6 +1361,8 @@ export const generateImplementationPlan = async (
         - **العنوان:** ${incident.title}
         - **الوصف:** ${incident.description}
         - **السبب الجذري:** ${incident.analysis?.rootCause?.cause || 'غير محدد'}
+        
+        ${sopContext}
 
         **التوصية المطلوب تنفيذها:**
         - **الإجراء:** ${recommendation.action}
@@ -1337,16 +1378,26 @@ export const generateImplementationPlan = async (
         1.  **الأدوات المقترحة (Tools):** اقترح قائمة من 2-4 أدوات (مثل منهجيات تحليل FMEA، برامج إدارة المشاريع كـ Jira، تقنيات Poka-yoke، أو حتى قوائم تحقق بسيطة) يمكن أن تساعد في التنفيذ. لكل أداة، اشرح كيف تساهم في نجاح تنفيذ هذه التوصية تحديدًا.
         2.  **سيناريو التنفيذ (Scenario):** قدم سيناريو تطبيقي مفصل ومحترف، خطوة بخطوة. صف كيف يمكن للفريق أن يبدأ، وما هي الخطوات الرئيسية، ومن يجب أن يشارك، وكيف يمكن قياس النجاح. اجعل السيناريو قصة عملية يمكن اتباعها.
     `;
+    
+    let contents: string | { parts: any[] };
+    if (incident.sopDocument?.content && !incident.sopComplianceAnalysis) {
+        contents = {
+            parts: [
+                { inlineData: { data: incident.sopDocument.content, mimeType: incident.sopDocument.mimeType } },
+                { text: prompt }
+            ]
+        };
+    } else {
+        contents = prompt;
+    }
 
     try {
         const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model: model,
-            contents: prompt,
+            contents: contents,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: implementationPlanSchema,
-                maxOutputTokens: 8192,
-                thinkingConfig: { thinkingBudget: 4096 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -1391,6 +1442,16 @@ export const perform5WhysAnalysis = async (incident: IncidentReport): Promise<Fi
     const model = "gemini-2.5-flash";
     const problem = incident.analysis?.rootCause?.cause || incident.title;
 
+    let sopContext: string;
+    if (incident.sopComplianceAnalysis) {
+        const summary = incident.sopComplianceAnalysis.summary;
+        sopContext = `**مصدر الحقيقة الإلزامي:** لقد تم إجراء تحليل توافق مع الدليل الرسمي (SOP) مسبقًا. يجب أن يكون تحليلك متوافقًا تمامًا مع ملخص التحليل التالي، وأن تكون الانحرافات المذكورة فيه هي نقطة الانطلاق لتسلسل "لماذا" الخاص بك: "${summary}"`;
+    } else if (incident.sopDocument) {
+        sopContext = `**مصدر الحقيقة الإلزامي:** لقد تم تزويدك بالدليل التشغيلي الرسمي (SOP). يجب أن يرتكز تحليلك بالكامل على محتوياته، وأن تعتبر أي انحرافات عنه كأسباب محتملة في تسلسل "لماذا" الخاص بك.`;
+    } else {
+        sopContext = "";
+    }
+
     const prompt = `
         بصفتك خبيرًا في تحليل الأسباب الجذرية، قم بتطبيق تقنية "لماذا الخمسة" (5 Whys) على المشكلة التالية المستخلصة من تقرير حادث.
         
@@ -1401,29 +1462,36 @@ export const perform5WhysAnalysis = async (incident: IncidentReport): Promise<Fi
         - **العنوان:** ${incident.title}
         - **الوصف:** ${incident.description}
         - **السبب الجذري الأولي (إن وجد):** ${incident.analysis?.rootCause?.cause || 'غير محدد'}
+        
+        ${sopContext}
 
         **مهمتك:**
         1. ابدأ بعبارة المشكلة الأولية.
-        2. اطرح سؤال "لماذا؟" بشكل متكرر (حوالي 5 مرات) للتعمق في سلسلة الأسباب. يجب أن تكون كل إجابة أساسًا للسؤال التالي.
+        2. اطرح سؤال 'لماذا؟' بشكل متكرر (حوالي 5 مرات) للتعمق في سلسلة الأسباب. يجب أن تكون كل إجابة أساسًا للسؤال التالي.
         3. حدد السبب الجذري الحقيقي في النهاية.
         4. قدم النتيجة **حصريًا** بصيغة JSON بناءً على المخطط المحدد. لا تضمن أي نص خارج كائن JSON.
-
-        **مثال على المنهجية:**
-        - المشكلة: تأخر تسليم المنتجات للعملاء.
-        - لماذا 1؟ (بسبب) تأخر عملية التعبئة والشحن.
-        - لماذا 2؟ (بسبب) نقص العمالة في قسم التعبئة.
-        - ... وهكذا وصولاً للسبب الجذري.
     `;
+    
+    let contents: string | { parts: any[] };
+
+    if (incident.sopDocument?.content && !incident.sopComplianceAnalysis) {
+        contents = {
+            parts: [
+                { inlineData: { data: incident.sopDocument.content, mimeType: incident.sopDocument.mimeType } },
+                { text: prompt }
+            ]
+        };
+    } else {
+        contents = prompt;
+    }
 
     try {
         const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model: model,
-            contents: prompt,
+            contents: contents,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: fiveWhysSchema,
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -1475,6 +1543,16 @@ export const performFishboneAnalysis = async (incident: IncidentReport): Promise
     const model = "gemini-2.5-flash";
     const problem = incident.analysis?.rootCause?.cause || incident.title;
 
+    let sopContext: string;
+    if (incident.sopComplianceAnalysis) {
+        const summary = incident.sopComplianceAnalysis.summary;
+        sopContext = `**مصدر الحقيقة الإلزامي:** تم تحليل الدليل الرسمي (SOP). يجب أن يكون تحليلك متوافقًا تمامًا مع ملخص التحليل التالي، ويجب أن تظهر الانحرافات المذكورة فيه كأسباب محتملة ضمن فئات مخطط هيكل السمكة المناسبة: "${summary}"`;
+    } else if (incident.sopDocument) {
+        sopContext = "**مصدر الحقيقة الإلزامي:** لقد تم تزويدك بالدليل التشغيلي الرسمي (SOP). يجب أن يرتكز تحليلك بالكامل على محتوياته، وأن تظهر أي انحرافات عنه كأسباب محتملة ضمن فئات مخطط هيكل السمكة المناسبة.";
+    } else {
+        sopContext = "";
+    }
+
     const prompt = `
         بصفتك خبيرًا في إدارة الجودة الشاملة (TQM)، قم بإنشاء تحليل "مخطط هيكل السمكة" (Ishikawa Diagram) للمشكلة التالية المستخلصة من تقرير حادث.
         
@@ -1485,6 +1563,8 @@ export const performFishboneAnalysis = async (incident: IncidentReport): Promise
         - **العنوان:** ${incident.title}
         - **الوصف:** ${incident.description}
         - **السبب الجذري الأولي (إن وجد):** ${incident.analysis?.rootCause?.cause || 'غير محدد'}
+        
+        ${sopContext}
 
         **مهمتك:**
         1. ابدأ بعبارة المشكلة كـ "رأس السمكة".
@@ -1499,16 +1579,27 @@ export const performFishboneAnalysis = async (incident: IncidentReport): Promise
         4. قدم قائمة من 2-4 أسباب محتملة لكل فئة من الفئات الست. يجب أن تكون الأسباب معقولة ومستنبطة من سياق الحادث.
         5. قدم النتيجة **حصريًا** بصيغة JSON بناءً على المخطط المحدد. لا تضمن أي نص خارج كائن JSON.
     `;
+    
+    let contents: string | { parts: any[] };
+
+    if (incident.sopDocument?.content && !incident.sopComplianceAnalysis) {
+        contents = {
+            parts: [
+                { inlineData: { data: incident.sopDocument.content, mimeType: incident.sopDocument.mimeType } },
+                { text: prompt }
+            ]
+        };
+    } else {
+        contents = prompt;
+    }
 
     try {
         const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model,
-            contents: prompt,
+            contents: contents,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: fishboneSchema,
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -1586,8 +1677,6 @@ export const performParetoAnalysis = async (incidents: IncidentReport[]): Promis
             config: {
                 responseMimeType: "application/json",
                 responseSchema: paretoSchema,
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -1643,6 +1732,16 @@ export const performFmeaAnalysis = async (incident: IncidentReport): Promise<Fme
     const model = "gemini-2.5-flash";
     const problem = incident.analysis?.rootCause?.cause || incident.title;
 
+    let sopContext: string;
+    if (incident.sopComplianceAnalysis) {
+        const summary = incident.sopComplianceAnalysis.summary;
+        sopContext = `**مصدر الحقيقة الإلزامي:** تم تحليل الدليل الرسمي (SOP). يجب أن يكون تحليلك متوافقًا تمامًا مع ملخص التحليل التالي، واستخدامه كمصدر أساسي لتحديد أنماط الفشل المحتملة وأسبابها المرتبطة بالانحرافات المذكورة: "${summary}"`;
+    } else if (incident.sopDocument) {
+        sopContext = "**مصدر الحقيقة الإلزامي:** لقد تم تزويدك بالدليل التشغيلي الرسمي (SOP). يجب أن يرتكز تحليلك بالكامل على محتوياته، وأن تستخدمه كمصدر أساسي لتحديد أنماط الفشل المحتملة وأسبابها.";
+    } else {
+        sopContext = "";
+    }
+
     const prompt = `
         بصفتك مهندس جودة متخصص في تحليل نمط وتأثير الفشل (FMEA)، قم بتحليل المشكلة التالية من سياق الحادث المقدم.
 
@@ -1653,6 +1752,8 @@ export const performFmeaAnalysis = async (incident: IncidentReport): Promise<Fme
         - **العنوان:** ${incident.title}
         - **الوصف:** ${incident.description}
         - **السبب الجذري الأولي (إن وجد):** ${incident.analysis?.rootCause?.cause || 'غير محدد'}
+        
+        ${sopContext}
 
         **مهمتك:**
         1.  حدد 3-5 "أنماط فشل" محتملة وواقعية مرتبطة بالعملية أو المشكلة المحددة.
@@ -1666,15 +1767,27 @@ export const performFmeaAnalysis = async (incident: IncidentReport): Promise<Fme
             - **الإجراء الموصى به:** اقترح إجراءً ملموسًا لتقليل الخطورة أو الحدوث، أو لتحسين الاكتشاف.
         3.  قدم النتيجة **حصريًا** بصيغة JSON بناءً على المخطط المحدد. يجب أن تكون النتائج مرتبة تنازليًا حسب RPN.
     `;
+    
+    let contents: string | { parts: any[] };
+
+    if (incident.sopDocument?.content && !incident.sopComplianceAnalysis) {
+        contents = {
+            parts: [
+                { inlineData: { data: incident.sopDocument.content, mimeType: incident.sopDocument.mimeType } },
+                { text: prompt }
+            ]
+        };
+    } else {
+        contents = prompt;
+    }
+
     try {
         const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model,
-            contents: prompt,
+            contents: contents,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: fmeaSchema,
-                maxOutputTokens: 8192,
-                thinkingConfig: { thinkingBudget: 4096 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -1689,32 +1802,21 @@ export const performFmeaAnalysis = async (incident: IncidentReport): Promise<Fme
     }
 };
 
-const faultTreeEventSchema: any = {
-    type: Type.OBJECT,
-    properties: {
-        name: { type: Type.STRING, description: "وصف الحدث." },
-        gate: { type: Type.STRING, enum: ['AND', 'OR'], description: "البوابة المنطقية التي تربط الأحداث الفرعية (إذا وجدت)." },
-    },
-    required: ["name"]
-};
-faultTreeEventSchema.properties.children = {
-    type: Type.ARRAY,
-    items: faultTreeEventSchema,
-    description: "قائمة بالأحداث الفرعية التي تساهم في هذا الحدث."
-};
-
-const faultTreeSchema = {
-    type: Type.OBJECT,
-    properties: {
-        topEvent: faultTreeEventSchema
-    },
-    required: ["topEvent"]
-};
-
 export const performFaultTreeAnalysis = async (incident: IncidentReport): Promise<FaultTreeAnalysis> => {
     const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const topEventDescription = incident.analysis?.rootCause?.cause || incident.title;
+
+    let sopContext: string;
+    if (incident.sopComplianceAnalysis) {
+        const summary = incident.sopComplianceAnalysis.summary;
+        sopContext = `**مصدر الحقيقة الإلزامي:** تم تحليل الدليل الرسمي (SOP). استخدم ملخص التحليل التالي كمصدر أساسي لتحديد التسلسل المنطقي للأحداث والأخطاء (الانحرافات) التي أدت إلى الحدث الأعلى: "${summary}"`;
+    } else if (incident.sopDocument) {
+        sopContext = "**مصدر الحقيقة الإلزامي:** لقد تم تزويدك بالدليل التشغيلي الرسمي (SOP). يجب أن يرتكز تحليلك بالكامل على محتوياته لتحديد التسلسل المنطقي للأحداث والأخطاء المحتملة التي أدت إلى الحدث الأعلى.";
+    } else {
+        sopContext = "";
+    }
+
     const prompt = `
         بصفتك خبيرًا في هندسة الموثوقية والسلامة، قم بإجراء تحليل شجرة الأخطاء (FTA) للحدث غير المرغوب فيه التالي.
 
@@ -1725,6 +1827,8 @@ export const performFaultTreeAnalysis = async (incident: IncidentReport): Promis
         - **العنوان:** ${incident.title}
         - **الوصف:** ${incident.description}
         - **السبب الجذري الأولي (إن وجد):** ${incident.analysis?.rootCause?.cause || 'غير محدد'}
+        
+        ${sopContext}
 
         **مهمتك:**
         1.  ابدأ بالحدث الأعلى المحدد.
@@ -1733,18 +1837,46 @@ export const performFaultTreeAnalysis = async (incident: IncidentReport): Promis
             - استخدم 'OR' إذا كان أي سبب من الأسباب الفرعية كافياً لوحده لإحداث الحدث الأعلى.
             - استخدم 'AND' إذا كانت جميع الأسباب الفرعية يجب أن تحدث معًا لإحداث الحدث الأعلى.
         4.  استمر في تفكيك كل حدث وسيط إلى أسباب أكثر جوهرية حتى تصل إلى الأحداث الأساسية (الأسباب الجذرية التي لا يمكن تفكيكها أكثر).
-        5.  يجب أن يكون الهيكل النهائي للشجرة منطقيًا ويعكس علاقات السبب والنتيجة بدقة.
-        6.  قدم النتيجة **حصريًا** بصيغة JSON بناءً على المخطط المحدد.
+        5.  يجب أن يكون الهيكل النهائي للشجرة منطقيًا ويعكس علاقات السبب والنتيجة بدقة، ويمكن أن يكون متشعبًا لعدة مستويات.
+        6.  قدم النتيجة **حصريًا** بصيغة JSON. يجب أن يتبع الـ JSON الهيكل التالي بدقة شديدة:
+            {
+              "topEvent": {
+                "name": "string",
+                "gate": "AND | OR | undefined",
+                "children": [
+                  {
+                    "name": "string",
+                    "gate": "AND | OR | undefined",
+                    "children": [ ... ] // يمكن أن يكون هذا متشعبًا بشكل متكرر
+                  },
+                  {
+                    "name": "string" // حدث أساسي بدون خاصية 'children'
+                  }
+                ]
+              }
+            }
+            ملاحظة هامة: يجب أن تكون خاصية 'children' مصفوفة. إذا لم يكن للحدث أطفال، فلا تقم بتضمين خاصية 'children' على الإطلاق. يجب أن تحتوي الأحداث التي لها 'children' على خاصية 'gate'. تأكد من أن الـ JSON الناتج صالح ويمكن تحليله.
     `;
+    
+    let contents: string | { parts: any[] };
+
+    if (incident.sopDocument?.content && !incident.sopComplianceAnalysis) {
+        contents = {
+            parts: [
+                { inlineData: { data: incident.sopDocument.content, mimeType: incident.sopDocument.mimeType } },
+                { text: prompt }
+            ]
+        };
+    } else {
+        contents = prompt;
+    }
+
     try {
         const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model,
-            contents: prompt,
+            contents: contents,
             config: {
                 responseMimeType: "application/json",
-                responseSchema: faultTreeSchema,
-                maxOutputTokens: 8192,
-                thinkingConfig: { thinkingBudget: 4096 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -1783,6 +1915,17 @@ export const performPokaYokeAnalysis = async (incident: IncidentReport): Promise
     const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const problem = incident.analysis?.rootCause?.cause || incident.title;
+
+    let sopContext: string;
+    if (incident.sopComplianceAnalysis) {
+        const summary = incident.sopComplianceAnalysis.summary;
+        sopContext = `**مصدر الحقيقة الإلزامي:** تم تحليل الدليل الرسمي (SOP). استلهم مباشرة من ملخص التحليل التالي لتحديد نقاط الضعف في العملية، واقترح حلول Poka-Yoke التي تمنع بشكل مادي أو إجرائي حدوث الانحرافات المذكورة: "${summary}"`;
+    } else if (incident.sopDocument) {
+        sopContext = "**مصدر الحقيقة الإلزامي:** لقد تم تزويدك بالدليل التشغيلي الرسمي (SOP). يجب أن يرتكز تحليلك بالكامل على محتوياته لتحديد نقاط الضعف في العملية واقتراح حلول Poka-Yoke التي تمنع حدوث الانحرافات عن الدليل.";
+    } else {
+        sopContext = "";
+    }
+
     const prompt = `
         بصفتك خبيرًا في منهجية Lean و Poka-Yoke (مقاومة الأخطاء)، قم بتوليد اقتراحات لمنع الأخطاء المتعلقة بالمشكلة التالية.
         
@@ -1792,6 +1935,8 @@ export const performPokaYokeAnalysis = async (incident: IncidentReport): Promise
         **سياق الحادث:**
         - **العنوان:** ${incident.title}
         - **الوصف:** ${incident.description}
+        
+        ${sopContext}
 
         **مهمتك:**
         1.  حلل نقطة الخطأ في العملية المذكورة.
@@ -1805,15 +1950,27 @@ export const performPokaYokeAnalysis = async (incident: IncidentReport): Promise
                 - **Shutdown (إيقاف):** يوقف العملية تلقائيًا عند اكتشاف خطأ.
         4.  قدم النتيجة **حصريًا** بصيغة JSON بناءً على المخطط المحدد.
     `;
+    
+    let contents: string | { parts: any[] };
+
+    if (incident.sopDocument?.content && !incident.sopComplianceAnalysis) {
+        contents = {
+            parts: [
+                { inlineData: { data: incident.sopDocument.content, mimeType: incident.sopDocument.mimeType } },
+                { text: prompt }
+            ]
+        };
+    } else {
+        contents = prompt;
+    }
+
     try {
         const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model,
-            contents: prompt,
+            contents: contents,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: pokaYokeSchema,
-                maxOutputTokens: 4096,
-                thinkingConfig: { thinkingBudget: 2048 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -1844,6 +2001,17 @@ export const performDmaicAnalysis = async (incident: IncidentReport): Promise<Dm
     const ai = getAiInstance();
     const model = "gemini-2.5-flash";
     const problem = incident.analysis?.rootCause?.cause || incident.title;
+    
+    let sopContext: string;
+    if (incident.sopComplianceAnalysis) {
+        const summary = incident.sopComplianceAnalysis.summary;
+        sopContext = `**مصدر الحقيقة الإلزامي:** تم تحليل الدليل الرسمي (SOP). يجب أن يتمحور مخطط DMAIC الخاص بك بالكامل حول قياس وتحليل وتحسين الالتزام بالعمليات كما هو موضح في ملخص التحليل التالي: "${summary}"`;
+    } else if (incident.sopDocument) {
+        sopContext = "**مصدر الحقيقة الإلزامي:** لقد تم تزويدك بالدليل التشغيلي الرسمي (SOP). يجب أن يتمحور مخطط DMAIC الخاص بك بالكامل حول قياس وتحليل وتحسين الالتزام بهذا الدليل.";
+    } else {
+        sopContext = "";
+    }
+
     const prompt = `
         بصفتك خبيرًا في Lean Six Sigma (حزام أسود)، قم بوضع مخطط لمشروع DMAIC لمعالجة المشكلة التالية.
 
@@ -1853,6 +2021,8 @@ export const performDmaicAnalysis = async (incident: IncidentReport): Promise<Dm
         **سياق الحادث:**
         - **العنوان:** ${incident.title}
         - **الوصف:** ${incident.description}
+        
+        ${sopContext}
 
         **مهمتك:**
         قم بإنشاء ملخص عالي المستوى لكل مرحلة من مراحل DMAIC الخمس. يجب أن يكون كل ملخص عمليًا وموجهًا نحو حل المشكلة المحددة.
@@ -1864,15 +2034,27 @@ export const performDmaicAnalysis = async (incident: IncidentReport): Promise<Dm
         
         قدم النتيجة **حصريًا** بصيغة JSON بناءً على المخطط المحدد.
     `;
+    
+    let contents: string | { parts: any[] };
+
+    if (incident.sopDocument?.content && !incident.sopComplianceAnalysis) {
+        contents = {
+            parts: [
+                { inlineData: { data: incident.sopDocument.content, mimeType: incident.sopDocument.mimeType } },
+                { text: prompt }
+            ]
+        };
+    } else {
+        contents = prompt;
+    }
+
     try {
         const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model,
-            contents: prompt,
+            contents: contents,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: dmaicSchema,
-                maxOutputTokens: 8192,
-                thinkingConfig: { thinkingBudget: 4096 },
             }
         }));
         const jsonText = response.text?.trim();
@@ -1884,5 +2066,451 @@ export const performDmaicAnalysis = async (incident: IncidentReport): Promise<Dm
     } catch (error) {
         console.error("خطأ في تحليل DMAIC باستخدام Gemini API:", error);
         throw new Error(`فشل في الحصول على تحليل DMAIC صالح. ${error instanceof Error ? error.message : ""}`);
+    }
+};
+
+const sopComplianceStepSchema = {
+  type: Type.OBJECT,
+  properties: {
+    procedureStep: { type: Type.STRING, description: "الخطوة الدقيقة من الدليل الرسمي." },
+    sopReference: { type: Type.STRING, description: "مرجع الخطوة في الدليل الرسمي (مثال: 'صفحة 5، قسم 3.2')." },
+    actualAction: { type: Type.STRING, description: "ما حدث بالفعل خلال الحادث فيما يتعلق بهذه الخطوة." },
+    complianceStatus: { type: Type.STRING, enum: ['Compliant', 'Non-Compliant', 'Partially-Compliant', 'Not-Applicable'], description: "حالة التوافق مع الخطوة." },
+    deviationAnalysis: { type: Type.STRING, description: "تحليل للانحراف عن الإجراء الرسمي." },
+    riskAssessment: { type: Type.STRING, description: "تقييم للمخاطر الناتجة عن هذا الانحراف." },
+    recommendedCorrectiveAction: { type: Type.STRING, description: "الإجراء التصحيحي الفوري لمعالجة هذا الانحراف المحدد. يجب أن يكون محددًا وقابلاً للتنفيذ." },
+    recommendedPreventiveAction: { type: Type.STRING, description: "الإجراء الوقائي الاستراتيجي لمنع تكرار هذا النوع من الانحراف في المستقبل." },
+  },
+  required: ["procedureStep", "actualAction", "complianceStatus", "deviationAnalysis", "riskAssessment", "recommendedCorrectiveAction", "recommendedPreventiveAction"],
+};
+
+const sopComplianceSchema = {
+  type: Type.OBJECT,
+  properties: {
+    overallComplianceScore: { type: Type.NUMBER, description: "نسبة مئوية (0-100) لمدى التوافق العام مع الدليل." },
+    summary: { type: Type.STRING, description: "ملخص تنفيذي لنتائج تحليل التوافق والمخاطر الرئيسية." },
+    steps: {
+      type: Type.ARRAY,
+      items: sopComplianceStepSchema
+    }
+  },
+  required: ["overallComplianceScore", "summary", "steps"],
+};
+
+export const performSopComplianceAnalysis = async (incident: IncidentReport, sopFileContent: string, sopFileMimeType: string): Promise<SopComplianceAnalysis> => {
+    const ai = getAiInstance();
+    const model = "gemini-2.5-flash";
+
+    const filePart = {
+        inlineData: {
+            data: sopFileContent,
+            mimeType: sopFileMimeType,
+        },
+    };
+
+    const textParts = [
+        {
+            text: `
+        بصفتك خبيرًا عالميًا في الامتثال التشغيلي وإدارة المخاطر (GRC)، مهمتك هي إجراء تحليل دقيق للتوافق بين الإجراءات المتبعة في حادث معين والدليل التشغيلي الرسمي للشركة المرفق كملف.
+
+        **1. سياق الحادث:**
+        - **العنوان:** ${incident.title}
+        - **الوصف والإجراءات المتخذة:** ${incident.description}
+        - **الإجراء الفوري:** ${incident.immediateAction}
+
+        **2. الدليل التشغيلي الرسمي (SOP):**
+        المستند المرفق هو الدليل الرسمي.
+
+        **مهمتك التحليلية (اتبع هذه الخطوات بأقصى درجات الدقة):**
+
+        **القاعدة الذهبية (يجب اتباعها أولاً):** مهمتك الأولى هي قراءة الدليل الرسمي المرفق **بالكامل** من البداية إلى النهاية لاكتساب فهم شامل. بعد القراءة الكاملة، حدد **جميع** الأقسام والخطوات والإجراءات التي لها صلة مباشرة بسياق الحادث. لا تتوقف عند أول قسم ذي صلة تجده؛ يجب أن يكون تحليلك شاملاً ويغطي كل جزء منطبق من الدليل لضمان دقة وتناسق النتائج.
+
+        **الآن، ابدأ بتنفيذ التحليل التفصيلي:**
+
+        1.  **استخراج الخطوات ذات الصلة:** من فهمك الكامل للدليل، استخرج **كل** خطوة إجرائية لها علاقة بالحادث. **لكل خطوة مستخرجة، قم بتضمين المرجع الدقيق لها من المستند (مثل رقم الصفحة، القسم، أو البند) في حقل 'sopReference'.** هذا الحقل إلزامي.
+        2.  **المقارنة خطوة بخطوة:** لكل خطوة مستخرجة، ارجع إلى وصف الحادث والإجراءات المتخذة لتحديد ما إذا كانت هذه الخطوة قد تم اتباعها.
+        3.  **تحديد حالة التوافق:** لكل خطوة، صنّف حالة التوافق بدقة إلى واحدة من الحالات التالية:
+            *   'Compliant' (متوافق): تم اتباع الخطوة بالكامل وصحيح.
+            *   'Non-Compliant' (غير متوافق): تم تجاهل الخطوة تمامًا أو تم اتخاذ إجراء مخالف لها.
+            *   'Partially-Compliant' (متوافق جزئيًا): تم اتباع الخطوة ولكن ليس بشكل كامل أو دقيق.
+            *   'Not-Applicable' (غير منطبق): الخطوة لم تكن ذات صلة بسياق الحادث المحدد.
+        4.  **تحليل الانحراف والمخاطر:** لأي خطوة غير متوافقة أو متوافقة جزئيًا، قدم تحليلًا واضحًا للانحراف والمخاطر المترتبة عليه.
+        5.  **اقتراح إجراءات منفصلة (قاعدة إلزامية):** لكل انحراف، يجب عليك اقتراح إجراءين منفصلين ومتميزين:
+            *   **إجراء تصحيحي (recommendedCorrectiveAction):** إجراء فوري لإصلاح الانحراف الذي حدث الآن. مثال: "إعادة تدريب الموظف على الخطوة X".
+            *   **إجراء وقائي (recommendedPreventiveAction):** إجراء استراتيجي لمنع تكرار المشكلة في المستقبل. مثال: "تحديث الدليل الرسمي لتوضيح الخطوة X وإضافة قائمة تحقق إلزامية".
+        يجب أن يكون الإجراءان مختلفين في طبيعتهما وهدفهما.
+        6.  **التقييم العام:** بناءً على عدد الخطوات المتوافقة من إجمالي الخطوات المطبقة، قم بحساب درجة توافق إجمالية كنسبة مئوية (مثال: إذا تم اتباع 4 من 5 خطوات منطبقة، تكون النسبة 80%).
+        7.  **الملخص التنفيذي:** قدم ملخصًا موجزًا لأهم النتائج، مع التركيز على أكبر فجوات الامتثال والمخاطر الرئيسية.
+
+        **الإخراج المطلوب:** قدم إجابتك **حصريًا** بتنسيق JSON بناءً على المخطط المحدد. **ملاحظة هامة:** يجب أن تكون جميع النصوص داخل كائن JSON الناتج باللغة العربية الفصحى بشكل كامل. **قاعدة صارمة لـ JSON:** تأكد من تهريب (escape) جميع علامات الاقتباس المزدوجة (") داخل القيم النصية باستخدام \\" وأي خطوط جديدة باستخدام \\n لتجنب أخطاء التحليل.
+    `
+        }
+    ];
+
+    const contentParts = [filePart, ...textParts];
+
+    try {
+        const response = await callGeminiWithRetry(() => ai.models.generateContent({
+            model,
+            contents: { parts: contentParts },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: sopComplianceSchema,
+            }
+        }));
+        const jsonText = response.text?.trim();
+        if (!jsonText) {
+            const blockReason = response.promptFeedback?.blockReason;
+            const finishReason = response.candidates?.[0]?.finishReason;
+            let errorDetails = [];
+            if (blockReason) errorDetails.push(`الطلب محظور لسبب: ${blockReason}`);
+            if (finishReason && finishReason !== 'STOP') errorDetails.push(`سبب الإنهاء: ${finishReason}`);
+            
+            const extraInfo = errorDetails.length > 0 ? ` (${errorDetails.join(', ')})` : '';
+            throw new Error(`فشل في إجراء تحليل التوافق. الاستجابة كانت فارغة.${extraInfo}`);
+        }
+
+        const parsableText = jsonText.startsWith('```json')
+            ? jsonText.substring(7, jsonText.length - 3).trim()
+            : jsonText;
+        const result: SopComplianceAnalysis = JSON.parse(parsableText);
+        
+        if (!result.steps) {
+             throw new Error("تحليل التوافق لم ينتج بيانات صالحة.");
+        }
+        return result;
+    } catch (error) {
+        console.error("خطأ في تحليل التوافق باستخدام Gemini API:", error);
+        throw new Error(`فشل في الحصول على تحليل توافق صالح. ${error instanceof Error ? error.message : ""}`);
+    }
+};
+
+const sopQuestionSchema = {
+    type: Type.OBJECT,
+    properties: {
+        answer: { type: Type.STRING, description: 'إجابة واضحة وموجزة على سؤال المستخدم، مستمدة حصريًا من المستند المقدم.' },
+        sopReference: { type: Type.STRING, description: 'المرجع الدقيق في المستند الذي تم استخلاص الإجابة منه (مثال: صفحة 5، قسم 3.2). إذا كانت الإجابة مجمعة من عدة أماكن، فاذكر المراجع الرئيسية.' }
+    },
+    required: ['answer', 'sopReference']
+};
+
+export const askSopQuestion = async (sopFileContent: string, sopMimeType: string, question: string): Promise<{ answer: string; sopReference: string; }> => {
+    const ai = getAiInstance();
+    const model = "gemini-2.5-flash";
+    const prompt = `
+        بصفتك خبيرًا في إجراءات التشغيل القياسية (SOP)، مهمتك هي الإجابة على سؤال المستخدم التالي بناءً على محتوى المستند المرفق **فقط**.
+        لا تستخدم أي معرفة خارجية. إذا كانت الإجابة غير موجودة في المستند، فقل ذلك بوضوح.
+        
+        **سؤال المستخدم:**
+        "${question}"
+
+        **مهمتك الإضافية:**
+        يجب أن تحدد بدقة المرجع في المستند الذي استندت إليه في إجابتك.
+        
+        قدم إجابتك بصيغة JSON.
+    `;
+    
+    try {
+        const response = await callGeminiWithRetry(() => ai.models.generateContent({
+            model,
+            contents: { parts: [{ inlineData: { data: sopFileContent, mimeType: sopMimeType } }, { text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: sopQuestionSchema,
+            }
+        }));
+        const jsonText = response.text?.trim();
+        if (!jsonText) throw new Error("لم يتمكن الذكاء الاصطناعي من الإجابة على السؤال.");
+        let parsableText = jsonText.startsWith('```json') ? jsonText.substring(7, jsonText.length - 3).trim() : jsonText;
+        const result = JSON.parse(parsableText);
+        return result;
+    } catch (error) {
+        console.error("خطأ في الإجابة على سؤال الدليل:", error);
+        throw new Error(`فشل في الإجابة على السؤال. ${error}`);
+    }
+};
+
+
+const testCaseSchema = {
+    type: Type.OBJECT,
+    properties: {
+        case: { type: Type.STRING, description: 'وصف لسيناريو اختباري واقعي يتحدى الإجراء المحدد.' },
+        expectedOutcome: { type: Type.STRING, description: 'النتيجة المتوقعة أو طريقة التعامل الصحيحة مع السيناريو وفقًا للدليل الرسمي.' },
+        sopReference: { type: Type.STRING, description: 'المرجع الدقيق في المستند الذي يستند إليه هذا الاختبار (مثال: صفحة 5، قسم 3.2).' }
+    },
+    required: ['case', 'expectedOutcome', 'sopReference']
+};
+
+export const generateTestCaseForProcedure = async (sopFileContent: string, sopMimeType: string, procedureText: string): Promise<{ case: string, expectedOutcome: string, sopReference: string }> => {
+    const ai = getAiInstance();
+    const model = "gemini-2.5-flash";
+    const prompt = `
+        بصفتك خبيرًا في تصميم سيناريوهات الاختبار والتدريب، تم تزويدك بالدليل التشغيلي الرسمي الكامل (SOP) وإجراء محدد من هذا الدليل.
+        
+        **الإجراء المحدد المطلوب اختباره:**
+        "${procedureText}"
+        
+        **مهمتك:**
+        1.  استوعب الإجراء المحدد في سياق الدليل الكامل.
+        2.  قم بإنشاء سيناريو اختباري (حالة افتراضية) واقعي ومحدد يتحدى بشكل مباشر تطبيق هذا الإجراء. يجب أن يختبر السيناريو فهم المستخدم وتطبيقه الدقيق للخطوات المذكورة.
+        3.  صف النتيجة المتوقعة أو طريقة التعامل الصحيحة مع هذا السيناريو بناءً على ما هو مذكور في الدليل الرسمي.
+        4.  حدد بدقة المرجع في المستند الذي استندت إليه (sopReference).
+        5.  قدم إجابتك بصيغة JSON.
+    `;
+    
+    try {
+        const response = await callGeminiWithRetry(() => ai.models.generateContent({
+            model,
+            contents: { parts: [{ inlineData: { data: sopFileContent, mimeType: sopMimeType } }, { text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: testCaseSchema,
+            }
+        }));
+        const jsonText = response.text?.trim();
+        if (!jsonText) throw new Error("لم يتمكن الذكاء الاصطناعي من إنشاء حالة اختبار.");
+        let parsableText = jsonText.startsWith('```json') ? jsonText.substring(7, jsonText.length - 3).trim() : jsonText;
+        return JSON.parse(parsableText);
+    } catch (error) {
+        console.error("خطأ في اختبار الدليل بحالة عشوائية:", error);
+        throw new Error(`فشل في إنشاء حالة الاختبار. ${error}`);
+    }
+};
+
+const comparisonSchema = {
+  type: Type.OBJECT,
+  properties: {
+    comparisonSummary: { type: Type.STRING, description: 'ملخص تنفيذي لنتائج المقارنة.' },
+    compliances: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          description: { type: Type.STRING, description: 'وصف لنقطة التطابق بين الإجراء المطبق والدليل.' },
+          sopReference: { type: Type.STRING, description: 'المرجع **الإلزامي** في الدليل لنقطة التطابق.' }
+        },
+        required: ['description', 'sopReference']
+      }
+    },
+    deviations: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          description: { type: Type.STRING, description: 'وصف للانحراف عن الدليل.' },
+          expectedProcedure: { type: Type.STRING, description: 'ما كان يجب أن يحدث وفقًا للدليل.' },
+          sopReference: { type: Type.STRING, description: 'المرجع **الإلزامي** في الدليل الذي تم الانحراف عنه.' }
+        },
+        required: ['description', 'expectedProcedure', 'sopReference']
+      }
+    },
+    improvementSuggestion: { type: Type.STRING, description: 'اقتراح لتحسين الأداء المستقبلي بناءً على الانحرافات.' }
+  },
+  required: ['comparisonSummary', 'compliances', 'deviations', 'improvementSuggestion']
+};
+
+
+export const compareProcedureToSop = async (sopFileContent: string, sopMimeType: string, userProcedureDescription: string): Promise<SopComparisonResult> => {
+    const ai = getAiInstance();
+    const model = "gemini-2.5-flash";
+    const prompt = `
+        بصفتك مدقق امتثال (Compliance Auditor) دقيق، مهمتك هي مقارنة الإجراء الذي طبقه المستخدم مع الدليل التشغيلي الرسمي (SOP) المرفق.
+        
+        **الإجراء الذي طبقه المستخدم (ما حدث بالفعل):**
+        "${userProcedureDescription}"
+        
+        **مهمتك:**
+        1.  اقرأ الدليل الرسمي المرفق بالكامل لفهمه بعمق.
+        2.  قارن وصف المستخدم خطوة بخطوة مع الإجراءات المذكورة في الدليل.
+        3.  حدد نقاط التطابق (Compliances) والانحرافات (Deviations).
+        4.  لكل نقطة تطابق أو انحراف، **يجب** أن تذكر المرجع الدقيق من المستند (رقم الصفحة، القسم، البند) في حقل 'sopReference'. هذا إلزامي خاصة للانحرافات.
+        5.  قدم ملخصًا لنتائج المقارنة واقتراحًا للتحسين.
+        6.  قدم إجابتك بصيغة JSON.
+    `;
+
+    try {
+        const response = await callGeminiWithRetry(() => ai.models.generateContent({
+            model,
+            contents: { parts: [{ inlineData: { data: sopFileContent, mimeType: sopMimeType } }, { text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: comparisonSchema,
+            }
+        }));
+        const jsonText = response.text?.trim();
+        if (!jsonText) throw new Error("لم يتمكن الذكاء الاصطناعي من إنشاء المقارنة.");
+        let parsableText = jsonText.startsWith('```json') ? jsonText.substring(7, jsonText.length - 3).trim() : jsonText;
+        return JSON.parse(parsableText);
+    } catch (error) {
+        console.error("خطأ في مقارنة الإجراء بالدليل:", error);
+        throw new Error(`فشل في إنشاء المقارنة. ${error}`);
+    }
+};
+
+const creativeIdeasSchema = {
+    type: Type.OBJECT,
+    properties: {
+        ideas: {
+            type: Type.ARRAY,
+            description: 'قائمة من 3 أفكار إبداعية وقابلة للتنفيذ.',
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    idea: { type: Type.STRING, description: 'الفكرة الإبداعية.' },
+                    sopReference: { type: Type.STRING, description: 'المرجع في الدليل الذي ألهم هذه الفكرة أو الذي يتعلق بها (اختياري).' }
+                },
+                required: ['idea']
+            }
+        }
+    },
+    required: ['ideas']
+};
+
+export const generateCreativeIdeasForSop = async (sopFileContent: string, sopMimeType: string): Promise<{ idea: string; sopReference?: string; }[]> => {
+    const ai = getAiInstance();
+    const model = "gemini-2.5-flash";
+    const prompt = `
+        بصفتك مستشار ابتكار متخصص في التميز التشغيلي، اقرأ مستند الدليل الرسمي المرفق.
+        مهمتك هي توليد 3 أفكار إبداعية وقابلة للتنفيذ لتحسين العملية الموصوفة، أو تعزيز السلامة، أو زيادة الكفاءة.
+        كن محددًا في اقتراحاتك. إذا كانت فكرتك مرتبطة بقسم معين في الدليل، فاذكر المرجع.
+        
+        قدم إجابتك بصيغة JSON.
+    `;
+
+    try {
+        const response = await callGeminiWithRetry(() => ai.models.generateContent({
+            model,
+            contents: { parts: [{ inlineData: { data: sopFileContent, mimeType: sopMimeType } }, { text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: creativeIdeasSchema,
+            }
+        }));
+        const jsonText = response.text?.trim();
+        if (!jsonText) throw new Error("لم يتمكن الذكاء الاصطناعي من توليد أفكار إبداعية.");
+        let parsableText = jsonText.startsWith('```json') ? jsonText.substring(7, jsonText.length - 3).trim() : jsonText;
+        const result = JSON.parse(parsableText);
+        return result.ideas;
+    } catch (error) {
+        console.error("خطأ في توليد أفكار إبداعية:", error);
+        throw new Error(`فشل في توليد الأفكار الإبداعية. ${error}`);
+    }
+};
+
+const proceduresSchema = {
+    type: Type.OBJECT,
+    properties: {
+        procedures: {
+            type: Type.ARRAY,
+            description: 'قائمة بالإجراءات المميزة الموجودة في المستند.',
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING, description: 'عنوان موجز وواضح للإجراء.' },
+                },
+                required: ['title']
+            }
+        }
+    },
+    required: ['procedures']
+};
+
+export const extractProceduresFromSop = async (sopFileContent: string, sopMimeType: string): Promise<ExtractedProcedure[]> => {
+    const ai = getAiInstance();
+    const model = "gemini-2.5-flash";
+    const prompt = `
+        بصفتك محلل عمليات، قم بقراءة مستند الدليل التشغيلي الرسمي (SOP) المرفق بالكامل.
+        مهمتك هي تحديد واستخلاص قائمة بجميع الإجراءات (Procedures) الرئيسية والمميزة الموصوفة في المستند.
+        لكل إجراء، قدم عنوانًا موجزًا ودقيقًا.
+        
+        قدم إجابتك حصريًا بصيغة JSON بناءً على المخطط المحدد.
+        ملاحظة هامة: تأكد من تهريب (escape) أي علامات اقتباس مزدوجة (") داخل العناوين باستخدام \\" لتجنب أخطاء التحليل.
+    `;
+
+    try {
+        const response = await callGeminiWithRetry(() => ai.models.generateContent({
+            model,
+            contents: { parts: [{ inlineData: { data: sopFileContent, mimeType: sopMimeType } }, { text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: proceduresSchema,
+            }
+        }));
+        const jsonText = response.text?.trim();
+        if (!jsonText) {
+            const blockReason = response.promptFeedback?.blockReason;
+            const finishReason = response.candidates?.[0]?.finishReason;
+            let errorDetails = [];
+            if (blockReason) errorDetails.push(`الطلب محظور لسبب: ${blockReason}`);
+            if (finishReason && finishReason !== 'STOP') errorDetails.push(`سبب الإنهاء: ${finishReason}`);
+            
+            const extraInfo = errorDetails.length > 0 ? ` (${errorDetails.join(', ')})` : '';
+            throw new Error(`لم يتمكن الذكاء الاصطناعي من استخلاص الإجراءات.${extraInfo}`);
+        }
+
+        let parsableText = jsonText.startsWith('```json') ? jsonText.substring(7, jsonText.length - 3).trim() : jsonText;
+        if (!parsableText) {
+            throw new Error("لم يتمكن الذكاء الاصطناعي من استخلاص الإجراءات: الاستجابة كانت فارغة بعد المعالجة.");
+        }
+        const result = JSON.parse(parsableText);
+        return result.procedures || [];
+    } catch (error) {
+        console.error("خطأ في استخلاص الإجراءات من الدليل:", error);
+        throw new Error(`فشل في استخلاص الإجراءات. ${error}`);
+    }
+};
+
+const mindMapNodeSchema: any = {
+  type: Type.OBJECT,
+  properties: {
+    topic: { type: Type.STRING, description: "الفكرة الرئيسية أو الخطوة." },
+    children: {
+      type: Type.ARRAY,
+      description: "المواضيع الفرعية أو الخطوات الفرعية.",
+      items: {} // Placeholder for self-reference
+    }
+  },
+  required: ['topic']
+};
+// Establish the recursion for the schema
+mindMapNodeSchema.properties.children.items = mindMapNodeSchema;
+
+
+export const generateMindMapForProcedure = async (sopFileContent: string, sopMimeType: string, procedureTitle: string): Promise<MindMapNode> => {
+    const ai = getAiInstance();
+    const model = "gemini-2.5-flash";
+    const prompt = `
+        بصفتك خبيرًا في التفكير البصري وتصميم العمليات، تم تزويدك بالدليل التشغيلي الرسمي (SOP) وعنوان إجراء محدد.
+        
+        **الإجراء المطلوب تحويله إلى خريطة ذهنية:**
+        "${procedureTitle}"
+        
+        **مهمتك:**
+        1.  اقرأ المستند المرفق وركز على القسم الذي يصف الإجراء المحدد.
+        2.  قم بإنشاء خريطة ذهنية هرمية لهذا الإجراء.
+        3.  يجب أن يكون الموضوع الرئيسي (الجذر) للخريطة هو عنوان الإجراء.
+        4.  يجب أن تكون الفروع الرئيسية هي الخطوات الأساسية في الإجراء.
+        5.  إذا كانت الخطوة الرئيسية تحتوي على تفاصيل أو خطوات فرعية، فقم بإضافتها كفروع ثانوية.
+        6.  تأكد من أن الهيكل منطقي ويعكس تسلسل الإجراء بدقة.
+        
+        قدم إجابتك بصيغة JSON متداخلة تمثل الخريطة الذهنية.
+    `;
+    
+    try {
+        const response = await callGeminiWithRetry(() => ai.models.generateContent({
+            model,
+            contents: { parts: [{ inlineData: { data: sopFileContent, mimeType: sopMimeType } }, { text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: mindMapNodeSchema,
+            }
+        }));
+        const jsonText = response.text?.trim();
+        if (!jsonText) throw new Error("لم يتمكن الذكاء الاصطناعي من إنشاء الخريطة الذهنية.");
+        let parsableText = jsonText.startsWith('```json') ? jsonText.substring(7, jsonText.length - 3).trim() : jsonText;
+        return JSON.parse(parsableText);
+    } catch (error) {
+        console.error("خطأ في إنشاء الخريطة الذهنية:", error);
+        throw new Error(`فشل في إنشاء الخريطة الذهنية. ${error}`);
     }
 };

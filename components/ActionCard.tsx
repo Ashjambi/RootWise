@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Recommendation, RecommendationStatus, RecommendationCategory, RecommendationType, RecommendationUpdate } from '../types';
+import { Recommendation, RecommendationStatus, RecommendationCategory, RecommendationUpdate } from '../types';
 import Tag from './ui/Tag';
 import Button from './ui/Button';
 
@@ -95,16 +95,6 @@ const ActionCard: React.FC<ActionCardProps> = ({ action, onUpdate, currentUser, 
         }
     };
 
-    const isCorrective = action.type === 'إجراء تصحيحي';
-    const typeStyle = isCorrective 
-        ? 'border-blue-400/30 bg-blue-400/10 text-blue-800'
-        : 'border-green-400/30 bg-green-400/10 text-green-800';
-    const typeIcon = isCorrective ? (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543-.94-3.31.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-    ) : (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 20.944a11.955 11.955 0 018.618-3.04 11.955 11.955 0 018.618 3.04A12.02 12.02 0 0021 12a11.955 11.955 0 01-2.382-5.016z" /></svg>
-    );
-
     const categoryStyles: Record<string, { bg: string, text: string, border: string }> = {
         [RecommendationCategory.Procedural]: { bg: 'bg-indigo-400/10', text: 'text-indigo-800', border: 'border-indigo-400/20' },
         [RecommendationCategory.Organizational]: { bg: 'bg-purple-400/10', text: 'text-purple-800', border: 'border-purple-400/20' },
@@ -115,6 +105,12 @@ const ActionCard: React.FC<ActionCardProps> = ({ action, onUpdate, currentUser, 
     };
     
     const style = categoryStyles[action.category] || { bg: 'bg-gray-400/10', text: 'text-gray-800', border: 'border-gray-400/20' };
+
+    const actionTypeStyles: Record<'تصحيحي' | 'وقائي', { bg: string, text: string, border: string }> = {
+        'تصحيحي': { bg: 'bg-red-500/10', text: 'text-red-800', border: 'border-red-500/20' },
+        'وقائي': { bg: 'bg-green-500/10', text: 'text-green-800', border: 'border-green-500/20' },
+    };
+    const typeStyle = action.actionType ? actionTypeStyles[action.actionType] : null;
 
     const renderStatusTransitionButton = () => {
         switch (action.status) {
@@ -202,10 +198,11 @@ const ActionCard: React.FC<ActionCardProps> = ({ action, onUpdate, currentUser, 
             {/* Header */}
             <div className="flex justify-between items-start gap-4">
                 <div className="flex flex-wrap items-center gap-2">
-                    <span title={action.type} className={`inline-flex items-center gap-x-1.5 px-2 py-1 text-xs font-semibold rounded-full border ${typeStyle}`}>
-                        {typeIcon}
-                        <span className="hidden sm:inline">{action.type}</span>
-                    </span>
+                    {typeStyle && (
+                        <span className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${typeStyle.bg} ${typeStyle.text} border ${typeStyle.border}`}>
+                            {action.actionType}
+                        </span>
+                    )}
                     <span className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${isMeta ? 'bg-purple-500/20 text-purple-800 border-purple-500/30' : `${style.bg} ${style.text} border ${style.border}`}`}>{isMeta ? 'إجراء استراتيجي' : action.category}</span>
                 </div>
                <Tag type={action.status} />

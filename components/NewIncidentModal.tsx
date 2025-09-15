@@ -60,7 +60,30 @@ const NewIncidentModal: React.FC<NewIncidentModalProps> = ({ onClose, onSubmit }
     
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
-            setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+            const addedFiles = Array.from(e.target.files);
+            const validFiles: File[] = [];
+            const oversizedFiles: string[] = [];
+            
+            for (const file of addedFiles) {
+                if (file.size > 13 * 1024 * 1024) { // Increased file size limit to 13MB
+                    oversizedFiles.push(file.name);
+                } else {
+                    validFiles.push(file);
+                }
+            }
+            
+            if (oversizedFiles.length > 0) {
+                setAnalysisError(`تم تجاوز الحد الأقصى لحجم الملف (13 ميجابايت). لم تتم إضافة الملفات التالية: ${oversizedFiles.join(', ')}`);
+            } else {
+                setAnalysisError(null);
+            }
+
+            if (validFiles.length > 0) {
+                setFiles(prev => [...prev, ...validFiles]);
+            }
+
+            // Clear the file input to allow re-selecting the same file after an error.
+            e.target.value = '';
         }
     };
 
@@ -178,7 +201,7 @@ const NewIncidentModal: React.FC<NewIncidentModalProps> = ({ onClose, onSubmit }
                                                 <input id="file-upload" name="file-upload" type="file" className="sr-only" multiple onChange={handleFileChange} accept="application/pdf,image/*,video/*" />
                                             </label>
                                         </div>
-                                        <p className="text-xs text-gray-500">PDF, PNG, JPG, MP4</p>
+                                        <p className="text-xs text-gray-500">PDF, PNG, JPG, MP4 (13MB كحد أقصى)</p>
                                     </div>
                                 </div>
                                 {analysisError && <p className="mt-2 text-xs text-red-600 text-center">{analysisError}</p>}

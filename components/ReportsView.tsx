@@ -14,7 +14,7 @@ const ReportsView: React.FC<{ incidents: IncidentReport[] }> = ({ incidents }) =
     
     const severityChartRef = useRef<HTMLCanvasElement>(null);
     const monthlyChartRef = useRef<HTMLCanvasElement>(null);
-    const reportContentRef = useRef<HTMLDivElement>(null);
+    const chartsRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         // Data for charts
@@ -74,21 +74,100 @@ const ReportsView: React.FC<{ incidents: IncidentReport[] }> = ({ incidents }) =
     }, [filteredIncidents]);
     
     const handleExportToPdf = async () => {
-        if (!reportContentRef.current) return;
+        if (!chartsRef.current) return;
         setIsExporting(true);
         try {
-            const canvas = await html2canvas(reportContentRef.current, {
-                scale: 2, // Higher scale for better quality
-                useCORS: true,
-                backgroundColor: null, 
-            });
-            const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF({
                 orientation: 'portrait',
-                unit: 'px',
-                format: [canvas.width, canvas.height]
+                unit: 'pt',
+                format: 'a4'
             });
-            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+
+            // 1. Add charts as an image
+            const canvas = await html2canvas(chartsRef.current, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#f0f2f5',
+            });
+            const imgData = canvas.toDataURL('image/png');
+            const imgProps = pdf.getImageProperties(imgData);
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+            // 2. Add table of incidents on a new page
+            if(filteredIncidents.length > 0) {
+              pdf.addPage();
+            
+              pdf.setR2L(true);
+
+              let y = 40;
+              const pageHeight = pdf.internal.pageSize.getHeight();
+              const margin = 40;
+              const rightEdge = pdf.internal.pageSize.getWidth() - margin;
+
+              pdf.setFontSize(18);
+              pdf.text("قائمة الحوادث", rightEdge, y, { align: 'right' });
+              y += 30;
+              
+              pdf.setFontSize(10);
+              pdf.setFont('helvetica', 'bold');
+              
+              const headers = ['العنوان', 'القسم', 'التاريخ', 'الخطورة'];
+              const colWidths = [255, 120, 80, 60]; 
+              let x = rightEdge;
+              
+              headers.forEach((header, i) => {
+                  pdf.text(header, x, y, { align: 'right' });
+                  x -= colWidths[i];
+              });
+
+              y += 15;
+              pdf.setDrawColor(200);
+              pdf.line(margin, y, pdf.internal.pageSize.getWidth() - margin, y);
+              y += 10;
+
+              pdf.setFontSize(9);
+              pdf.setFont('helvetica', 'normal');
+
+              filteredIncidents.forEach(inc => {
+                  const titleLines = pdf.splitTextToSize(inc.title, colWidths[0] - 5);
+                  const rowHeight = (titleLines.length * 10) + 10;
+
+                  if (y + rowHeight > pageHeight - margin) {
+                      pdf.addPage();
+                      y = margin;
+                      // Redraw headers on new page
+                      pdf.setFontSize(10);
+                      pdf.setFont('helvetica', 'bold');
+                      x = rightEdge;
+                      headers.forEach((header, i) => {
+                          pdf.text(header, x, y, { align: 'right' });
+                          x -= colWidths[i];
+                      });
+                      y += 25;
+                      pdf.setFontSize(9);
+                      pdf.setFont('helvetica', 'normal');
+                  }
+                  
+                  x = rightEdge;
+                  const rowY = y + 10;
+                  
+                  pdf.text(titleLines, x, rowY, { align: 'right' });
+                  x -= colWidths[0];
+
+                  pdf.text(inc.department, x, rowY, { align: 'right' });
+                  x -= colWidths[1];
+
+                  pdf.text(new Date(inc.date).toLocaleDateString('ar-EG'), x, rowY, { align: 'right' });
+                  x -= colWidths[2];
+
+                  pdf.text(inc.severity, x, rowY, { align: 'right' });
+
+                  y += rowHeight;
+              });
+            }
+    
             pdf.save(`RootWise_Report_${new Date().toISOString().split('T')[0]}.pdf`);
         } catch (error) {
             console.error("Error exporting to PDF:", error);
@@ -113,24 +192,26 @@ const ReportsView: React.FC<{ incidents: IncidentReport[] }> = ({ incidents }) =
                 </Button>
             </div>
             
-            <div ref={reportContentRef} className="bg-[#f0f2f5] p-4 rounded-lg">
-                <Card className="mb-6">
-                    <h2 className="text-xl font-bold text-gray-800 font-cairo mb-4">نظرة عامة على الحوادث</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                             <h3 className="font-semibold text-center mb-2">توزيع الحوادث حسب الخطورة</h3>
-                             <div className="h-64 relative">
-                                <canvas ref={severityChartRef}></canvas>
-                             </div>
-                        </div>
-                        <div>
-                             <h3 className="font-semibold text-center mb-2">عدد الحوادث شهريًا</h3>
-                             <div className="h-64 relative">
-                                <canvas ref={monthlyChartRef}></canvas>
+            <div className="bg-[#f0f2f5] p-4 rounded-lg">
+                <div ref={chartsRef}>
+                    <Card className="mb-6">
+                        <h2 className="text-xl font-bold text-gray-800 font-cairo mb-4">نظرة عامة على الحوادث</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                 <h3 className="font-semibold text-center mb-2">توزيع الحوادث حسب الخطورة</h3>
+                                 <div className="h-64 relative">
+                                    <canvas ref={severityChartRef}></canvas>
+                                 </div>
+                            </div>
+                            <div>
+                                 <h3 className="font-semibold text-center mb-2">عدد الحوادث شهريًا</h3>
+                                 <div className="h-64 relative">
+                                    <canvas ref={monthlyChartRef}></canvas>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </Card>
+                    </Card>
+                </div>
 
                 <Card>
                     <h2 className="text-xl font-bold text-gray-800 font-cairo mb-4">قائمة الحوادث</h2>

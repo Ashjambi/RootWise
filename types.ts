@@ -33,8 +33,6 @@ export enum RecommendationStatus {
     Ineffective = 'غير فعال'
 }
 
-export type RecommendationType = 'إجراء تصحيحي' | 'إجراء وقائي';
-
 export interface RecommendationUpdate {
     date: string;
     author: string;
@@ -43,7 +41,7 @@ export interface RecommendationUpdate {
 
 export interface Recommendation {
     id: string;
-    type: RecommendationType;
+    actionType: 'تصحيحي' | 'وقائي';
     category: RecommendationCategory;
     action: string;
     impact: string;
@@ -75,6 +73,7 @@ export interface SopGap {
     expectedProcedure: string;
     actualAction: string;
     gapAnalysis: string;
+    sopReference?: string;
 }
 
 export interface Role {
@@ -226,6 +225,23 @@ export interface DmaicAnalysis {
   control: string;
 }
 
+export interface SopComplianceStep {
+  procedureStep: string;
+  sopReference?: string;
+  actualAction: string;
+  complianceStatus: 'Compliant' | 'Non-Compliant' | 'Partially-Compliant' | 'Not-Applicable';
+  deviationAnalysis: string;
+  riskAssessment: string;
+  recommendedCorrectiveAction: string;
+  recommendedPreventiveAction: string;
+}
+
+export interface SopComplianceAnalysis {
+  overallComplianceScore: number;
+  summary: string;
+  steps: SopComplianceStep[];
+}
+
 export interface IncidentReport {
   id: string;
   title: string;
@@ -251,6 +267,12 @@ export interface IncidentReport {
   faultTreeAnalysis?: FaultTreeAnalysis;
   pokaYokeAnalysis?: PokaYokeAnalysis;
   dmaicAnalysis?: DmaicAnalysis;
+  sopComplianceAnalysis?: SopComplianceAnalysis;
+  sopDocument?: {
+    name: string;
+    content?: string; // base64 encoded
+    mimeType: string;
+  };
 }
 
 export interface GlobalCase {
@@ -328,4 +350,27 @@ export interface AppSettings {
   features: CustomFeature[];
 }
 
-export type ActiveView = 'dashboard' | 'incident' | 'global_cases' | 'knowledge_base' | 'reports' | 'my_actions' | 'ai_coach' | 'risk_dashboard' | 'about' | 'settings' | 'known_tools_analysis' | 'creative_methods';
+export interface SopComparisonResult {
+  comparisonSummary: string;
+  compliances: {
+    description: string;
+    sopReference: string;
+  }[];
+  deviations: {
+    description: string;
+    expectedProcedure: string;
+    sopReference: string;
+  }[];
+  improvementSuggestion: string;
+}
+
+export interface ExtractedProcedure {
+  title: string;
+}
+
+export interface MindMapNode {
+  topic: string;
+  children?: MindMapNode[];
+}
+
+export type ActiveView = 'dashboard' | 'incident' | 'global_cases' | 'knowledge_base' | 'reports' | 'my_actions' | 'sop_assistant' | 'risk_dashboard' | 'about' | 'settings' | 'known_tools_analysis';

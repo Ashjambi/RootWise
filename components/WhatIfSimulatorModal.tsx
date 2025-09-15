@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { IncidentReport, SimulatedAction, Recommendation, AnalysisResult, RecommendationStatus, RecommendationCategory, RecommendationType } from '../types';
+import { IncidentReport, SimulatedAction, Recommendation, AnalysisResult, RecommendationStatus, RecommendationCategory } from '../types';
 import { simulateWhatIf } from '../services/geminiService';
 import Button from './ui/Button';
 
@@ -39,8 +39,8 @@ const WhatIfSimulatorModal: React.FC<WhatIfSimulatorModalProps> = ({ incident, o
     const handleAddRecommendation = (simulatedAction: SimulatedAction) => {
         const newRecommendation: Recommendation = {
             id: `SIM-REC-${Date.now()}`,
+            actionType: 'وقائي',
             action: simulatedAction.action,
-            type: 'إجراء وقائي',
             rationale: simulatedAction.rationale,
             category: RecommendationCategory.Simulation,
             status: RecommendationStatus.Proposed,

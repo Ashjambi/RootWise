@@ -303,7 +303,7 @@ const MyActionsView: React.FC<MyActionsViewProps> = ({ allActionItems, onNavigat
 
             <Card className="mb-6">
                  <div className="flex items-center gap-x-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                     <input
                         type="text"
                         placeholder="ابحث عن حادث أو سلسلة حوادث بالاسم أو المعرّف..."
@@ -330,7 +330,7 @@ const MyActionsView: React.FC<MyActionsViewProps> = ({ allActionItems, onNavigat
                                                 <span className="flex items-center gap-x-1.5"><div className="w-2 h-2 rounded-full bg-gray-400"></div><span><strong>{totalActionsCount}</strong> إجراءات</span></span>
                                             </div>
                                         </div>
-                                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 text-gray-500 transition-transform transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 text-gray-500 transition-transform transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                                     </button>
                                     {isOpen && (
                                         <div className="p-4 border-t border-gray-900/10 bg-white/20">
@@ -360,7 +360,7 @@ const MyActionsView: React.FC<MyActionsViewProps> = ({ allActionItems, onNavigat
                                 <Card key={groupId} className="!p-0 overflow-hidden transition-all duration-300 border-2 border-red-500/20 bg-red-500/5">
                                     <div className="p-4">
                                         <p className="font-bold text-lg text-red-800 font-cairo flex items-center gap-x-3">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 4.875 4.875 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.092 1.21-.138 2.43-.138 3.662a4.875 4.875 0 007.466 4.472.5.5 0 00.568 0A4.875 4.875 0 0019.5 12z" /></svg>
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 4.875 4.875 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.092 1.21-.138 2.43-.138 3.662a4.875 4.875 0 007.466 4.472.5.5 0 00.568 0A4.875 4.875 0 0019.5 12z" /></svg>
                                             سلسلة حوادث متكررة: {group.chainTitle}
                                         </p>
                                         <div className="flex items-center gap-x-4 mt-2 text-sm text-red-700">
@@ -371,7 +371,7 @@ const MyActionsView: React.FC<MyActionsViewProps> = ({ allActionItems, onNavigat
                                         {/* Meta-Analysis Section */}
                                         <div className="mt-4 pt-4 border-t border-red-900/10">
                                             <h4 className="font-bold text-purple-800 mb-2 flex items-center gap-x-2">
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
                                                 تحليل نمط التكرار (Meta-Analysis)
                                             </h4>
                                             {currentMetaState.error && <div className="mb-2 p-2 text-xs bg-red-500/10 text-red-700 rounded-md">{currentMetaState.error}</div>}

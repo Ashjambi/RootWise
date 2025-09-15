@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo } from 'react';
 import { IncidentReport, IncidentStatus, SystemicInsight, KnowledgeCapsuleItem, ActionItem, DashboardBriefing, ActiveView, AppSettings, RecommendationStatus, ParetoAnalysis } from './types';
 import { INITIAL_INCIDENTS, CURRENT_USER, DEFAULT_SETTINGS } from './constants';
@@ -10,13 +9,13 @@ import NewIncidentModal from './components/NewIncidentModal';
 import GlobalCasesView from './components/GlobalCasesView';
 import KnowledgeBaseView from './components/KnowledgeBaseView';
 import ReportsView from './components/ReportsView';
-import MyActionsView from './components/Myactionsview.tsx';
-import AICoachView from './components/AICoachView';
+// FIX: Corrected import casing to match the file system. The file is 'Myactionsview.tsx' but was imported as 'MyActionsView'.
+import MyActionsView from './components/Myactionsview';
+import SopAssistantView from './components/AICoachView';
 import RiskDashboardView from './components/RiskDashboardView';
 import AboutView from './components/AboutView';
 import SettingsView from './components/SettingsView';
 import KnownToolsAnalysisView from './components/KnownToolsAnalysisView';
-import CreativeMethodsView from './components/CreativeMethodsView';
 
 const App: React.FC = () => {
   const [incidents, setIncidents] = useState<IncidentReport[]>(INITIAL_INCIDENTS);
@@ -182,18 +181,12 @@ const App: React.FC = () => {
         return <ReportsView incidents={incidents} />;
       case 'my_actions':
           return <MyActionsView allActionItems={allActionItems} onNavigate={handleNavigate} onUpdateIncident={handleUpdateIncident} incidents={incidents} currentUser={currentUser} />;
-      case 'ai_coach':
-          return <AICoachView incidents={incidents} />;
+      case 'sop_assistant':
+          return <SopAssistantView />;
        case 'risk_dashboard':
-          return <RiskDashboardView incidents={incidents} />;
+          return <RiskDashboardView incidents={incidents} onNavigate={handleNavigate} />;
        case 'known_tools_analysis':
           return <KnownToolsAnalysisView incidents={incidents} onUpdateIncident={handleUpdateIncident} paretoAnalysis={paretoAnalysis} setParetoAnalysis={setParetoAnalysis} />;
-       case 'creative_methods':
-          return <CreativeMethodsView 
-                    onNavigate={handleNavigate} 
-                    setIsModalOpen={setIsModalOpen}
-                    incidents={incidents}
-                 />;
        case 'about':
           return <AboutView features={settings.features} />;
        case 'settings':
