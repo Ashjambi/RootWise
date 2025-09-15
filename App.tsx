@@ -9,8 +9,8 @@ import NewIncidentModal from './components/NewIncidentModal';
 import GlobalCasesView from './components/GlobalCasesView';
 import KnowledgeBaseView from './components/KnowledgeBaseView';
 import ReportsView from './components/ReportsView';
-// FIX: Corrected import path casing to match file system 'Myactionsview.tsx'.
-import MyActionsView from './components/Myactionsview';
+// FIX: Corrected import path casing to 'MyActionsView.tsx' to resolve module resolution conflict.
+import MyActionsView from './components/MyActionsView';
 import SopAssistantView from './components/AICoachView';
 import RiskDashboardView from './components/RiskDashboardView';
 import AboutView from './components/AboutView';
