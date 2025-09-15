@@ -3,7 +3,7 @@ import { IncidentReport, FiveWhysAnalysis, FishboneAnalysis, ParetoAnalysis, Fme
 import { perform5WhysAnalysis, performFishboneAnalysis, performParetoAnalysis, performFmeaAnalysis, performFaultTreeAnalysis, performPokaYokeAnalysis, performDmaicAnalysis } from '../services/geminiService';
 import Card from './ui/Card';
 import Button from './ui/Button';
-import { Chart } from 'chart.js';
+import { Chart } from "chart.js";
 
 interface KnownToolsAnalysisViewProps {
   incidents: IncidentReport[];
