@@ -9,7 +9,7 @@ import NewIncidentModal from './components/NewIncidentModal';
 import GlobalCasesView from './components/GlobalCasesView';
 import KnowledgeBaseView from './components/KnowledgeBaseView';
 import ReportsView from './components/ReportsView';
-// FIX: Corrected import path casing to 'MyActionsView.tsx' to resolve module resolution conflict.
+// FIX: Corrected import path for MyActionsView to use PascalCase, resolving a case-sensitivity issue in module resolution.
 import MyActionsView from './components/MyActionsView';
 import SopAssistantView from './components/AICoachView';
 import RiskDashboardView from './components/RiskDashboardView';

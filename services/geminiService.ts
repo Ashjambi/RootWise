@@ -1802,6 +1802,29 @@ export const performFmeaAnalysis = async (incident: IncidentReport): Promise<Fme
     }
 };
 
+// FIX: Added a response schema for Fault Tree Analysis to ensure robust JSON parsing.
+const faultTreeEventSchema: any = {
+    type: Type.OBJECT,
+    properties: {
+        name: { type: Type.STRING },
+        gate: { type: Type.STRING, enum: ['AND', 'OR'] },
+        children: {
+            type: Type.ARRAY,
+            items: {}, // Placeholder for recursive definition
+        },
+    },
+    required: ['name'],
+};
+faultTreeEventSchema.properties.children.items = faultTreeEventSchema;
+
+const faultTreeAnalysisSchema = {
+    type: Type.OBJECT,
+    properties: {
+        topEvent: faultTreeEventSchema,
+    },
+    required: ['topEvent'],
+};
+
 export const performFaultTreeAnalysis = async (incident: IncidentReport): Promise<FaultTreeAnalysis> => {
     const ai = getAiInstance();
     const model = "gemini-2.5-flash";
@@ -1877,6 +1900,8 @@ export const performFaultTreeAnalysis = async (incident: IncidentReport): Promis
             contents: contents,
             config: {
                 responseMimeType: "application/json",
+                // FIX: Use the defined response schema.
+                responseSchema: faultTreeAnalysisSchema,
             }
         }));
         const jsonText = response.text?.trim();
