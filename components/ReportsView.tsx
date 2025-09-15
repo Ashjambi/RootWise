@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { IncidentReport, IncidentSeverity } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
-import { Chart } from "chart.js";
+import { Chart, registerables } from "chart.js";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+
+Chart.register(...registerables);
 
 const baseInputClasses = "block w-full px-3 py-2 border rounded-lg shadow-inner-sm placeholder-gray-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500/70 sm:text-sm bg-white/70 border-white/80 transition-shadow duration-200 focus:shadow-md";
 
