@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useCallback } from 'react';
 import { ActionItem, IncidentReport, RecommendationStatus, Recommendation, ActiveView, GlobalCase } from '../types';
 import Card from './ui/Card';
