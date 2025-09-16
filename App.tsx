@@ -11,8 +11,8 @@ import NewIncidentModal from './components/NewIncidentModal';
 import GlobalCasesView from './components/GlobalCasesView';
 import KnowledgeBaseView from './components/KnowledgeBaseView';
 import ReportsView from './components/ReportsView';
-// FIX: Corrected import path casing to resolve a filename conflict.
-import MyActionsView from './components/Myactionsview';
+// FIX: Corrected import path casing for MyActionsView to resolve a filename conflict.
+import MyActionsView from './components/MyActionsView';
 import SopAssistantView from './components/SopAssistantView';
 import RiskDashboardView from './components/RiskDashboardView';
 import AboutView from './components/AboutView';
