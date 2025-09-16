@@ -700,10 +700,6 @@ const IncidentDetail: React.FC<IncidentDetailProps> = ({ incident, allIncidents,
                             ) : (
                                 <div className="mt-2"><ul role="list" className="border border-gray-200/80 rounded-md divide-y divide-gray-200/80"><li className="pl-3 pr-4 py-3 flex items-center justify-between text-sm"><div className="w-0 flex-1 flex items-center"><FileIcon type={sopFile.type} /><span className="mr-2 flex-1 w-0 truncate">{sopFile.name}</span></div><div className="ml-4 flex-shrink-0 flex items-center space-i-4"><span className="text-gray-500">{(sopFile.size / 1024).toFixed(2)} KB</span><button type="button" onClick={handleRemoveSopFile} className="font-medium text-red-600 hover:text-red-500 mr-3">إزالة</button></div></li></ul></div>
                             )}
-                            <div className="text-center p-3 mt-4 bg-yellow-400/20 text-yellow-800 border border-yellow-400/30 rounded-xl">
-                                <p className="font-bold">ملاحظة هامة للمشرف:</p>
-                                <p className="text-sm">تم تحديث مسار الواجهة البرمجية (API) لحل خطأ 405. يرجى التأكد من أن الخادم يقبل طلبات POST على المسار الجديد: <strong>/api/analyze-sop</strong>.</p>
-                            </div>
                             <div className="text-center mt-4"><Button onClick={handlePerformUnifiedAnalysis} isLoading={isUnifiedAnalyzing} disabled={isUnifiedAnalyzing || !sopFile}>بدء التحليل الموحد (إصدار جديد)</Button></div>
                         </div>
                     </Card>
