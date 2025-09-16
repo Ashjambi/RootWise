@@ -16,30 +16,26 @@ import {
 } from '../types';
 
 /**
- * A generic helper function to call the backend proxy API.
+ * A generic helper function to call the backend proxy API with a JSON payload.
  * @param endpoint The API endpoint to call (e.g., '/analyze').
- * @param body The request body.
- * @param isFormData If true, the body is treated as FormData; otherwise, it's stringified as JSON.
+ * @param body The request body, which will be stringified as JSON.
  * @returns A promise that resolves with the JSON response from the backend.
  */
-async function callProxyApi<T>(endpoint: string, body: any, isFormData: boolean = false): Promise<T> {
+async function callProxyApi<T>(endpoint: string, body: any): Promise<T> {
   const options: RequestInit = {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   };
-
-  if (isFormData) {
-    options.body = body as FormData;
-  } else {
-    options.headers = { 'Content-Type': 'application/json' };
-    options.body = JSON.stringify(body);
-  }
 
   // All API calls go to a relative /api endpoint, which is handled by the backend proxy.
   const response = await fetch(`/api${endpoint}`, options);
 
   if (!response.ok) {
-    // Try to parse a JSON error message from the backend, otherwise use status text.
-    const errorData = await response.json().catch(() => ({ message: `فشل الطلب مع الحالة: ${response.statusText}` }));
+    // Try to parse a JSON error message from the backend, otherwise use status code and text.
+    const errorData = await response.json().catch(() => ({ 
+      message: `فشل الطلب مع الحالة: ${response.status} ${response.statusText}`.trim() 
+    }));
     throw new Error(errorData.message || 'حدث خطأ غير معروف في واجهة برمجة التطبيقات.');
   }
 
@@ -104,11 +100,8 @@ export const generateTrainingContent = async (incident: IncidentReport): Promise
 };
 
 export const extractIncidentDetailsFromAttachment = async (fileContent: string, mimeType: string, userContext: string): Promise<Partial<IncidentReport>> => {
-  const formData = new FormData();
-  formData.append('fileContent', fileContent);
-  formData.append('mimeType', mimeType);
-  formData.append('userContext', userContext);
-  return callProxyApi<Partial<IncidentReport>>('/extract-from-attachment', formData, true);
+  const body = { fileContent, mimeType, userContext };
+  return callProxyApi<Partial<IncidentReport>>('/extract-from-attachment', body);
 };
 
 export const generateImplementationPlan = async (incident: IncidentReport, recommendation: Recommendation, relevantCases: GlobalCase[]): Promise<{ tools: { name: string; description: string }[]; scenario: string; }> => {
@@ -144,57 +137,38 @@ export const performDmaicAnalysis = async (incident: IncidentReport): Promise<Dm
 };
 
 export const performSopComplianceAnalysis = async (incident: IncidentReport, sopFileContent: string, sopFileMimeType: string): Promise<SopComplianceAnalysis> => {
-    const formData = new FormData();
-    formData.append('incident', JSON.stringify(incident));
-    formData.append('sopFileContent', sopFileContent);
-    formData.append('sopFileMimeType', sopFileMimeType);
-    return callProxyApi<SopComplianceAnalysis>('/sop-compliance', formData, true);
+    const body = { incident, sopFileContent, sopFileMimeType };
+    return callProxyApi<SopComplianceAnalysis>('/sop-compliance', body);
 };
 
 export const askSopQuestion = async (sopFileContent: string, sopMimeType: string, question: string): Promise<{ answer: string; sopReference: string; }> => {
-    const formData = new FormData();
-    formData.append('sopFileContent', sopFileContent);
-    formData.append('sopMimeType', sopMimeType);
-    formData.append('question', question);
-    return callProxyApi<{ answer: string; sopReference: string; }>('/sop-qa', formData, true);
+    const body = { sopFileContent, sopMimeType, question };
+    return callProxyApi<{ answer: string; sopReference: string; }>('/sop-qa', body);
 };
 
 export const generateTestCaseForProcedure = async (sopFileContent: string, sopMimeType: string, procedureText: string): Promise<{ case: string, expectedOutcome: string, sopReference: string }> => {
-    const formData = new FormData();
-    formData.append('sopFileContent', sopFileContent);
-    formData.append('sopMimeType', sopMimeType);
-    formData.append('procedureText', procedureText);
-    return callProxyApi<{ case: string, expectedOutcome: string, sopReference: string }>('/sop-test-case', formData, true);
+    const body = { sopFileContent, sopMimeType, procedureText };
+    return callProxyApi<{ case: string, expectedOutcome: string, sopReference: string }>('/sop-test-case', body);
 };
 
 export const compareProcedureToSop = async (sopFileContent: string, sopMimeType: string, userProcedureDescription: string): Promise<SopComparisonResult> => {
-    const formData = new FormData();
-    formData.append('sopFileContent', sopFileContent);
-    formData.append('sopMimeType', sopMimeType);
-    formData.append('userProcedureDescription', userProcedureDescription);
-    return callProxyApi<SopComparisonResult>('/sop-compare', formData, true);
+    const body = { sopFileContent, sopMimeType, userProcedureDescription };
+    return callProxyApi<SopComparisonResult>('/sop-compare', body);
 };
 
 export const generateCreativeIdeasForSop = async (sopFileContent: string, sopMimeType: string): Promise<{ idea: string; sopReference?: string; }[]> => {
-    const formData = new FormData();
-    formData.append('sopFileContent', sopFileContent);
-    formData.append('sopMimeType', sopMimeType);
-    const result = await callProxyApi<{ ideas: { idea: string; sopReference?: string; }[] }>('/sop-ideas', formData, true);
+    const body = { sopFileContent, sopMimeType };
+    const result = await callProxyApi<{ ideas: { idea: string; sopReference?: string; }[] }>('/sop-ideas', body);
     return result.ideas;
 };
 
 export const extractProceduresFromSop = async (sopFileContent: string, sopMimeType: string): Promise<ExtractedProcedure[]> => {
-    const formData = new FormData();
-    formData.append('sopFileContent', sopFileContent);
-    formData.append('sopMimeType', sopMimeType);
-    const result = await callProxyApi<{ procedures: ExtractedProcedure[] }>('/sop-extract-procedures', formData, true);
+    const body = { sopFileContent, sopMimeType };
+    const result = await callProxyApi<{ procedures: ExtractedProcedure[] }>('/sop-extract-procedures', body);
     return result.procedures;
 };
 
 export const generateMindMapForProcedure = async (sopFileContent: string, sopMimeType: string, procedureTitle: string): Promise<MindMapNode> => {
-    const formData = new FormData();
-    formData.append('sopFileContent', sopFileContent);
-    formData.append('sopMimeType', sopMimeType);
-    formData.append('procedureTitle', procedureTitle);
-    return callProxyApi<MindMapNode>('/sop-mindmap', formData, true);
+    const body = { sopFileContent, sopMimeType, procedureTitle };
+    return callProxyApi<MindMapNode>('/sop-mindmap', body);
 };
