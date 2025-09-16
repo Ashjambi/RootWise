@@ -16,20 +16,29 @@ import {
 } from '../types';
 
 /**
- * A generic helper function to call the backend proxy API with a JSON payload.
- * @param endpoint The API endpoint to call (e.g., '/analyze').
- * @param body The request body, which will be stringified as JSON.
+ * A generic helper function to call the backend proxy API.
+ * All requests are routed through a single `/api/proxy` endpoint to work around
+ * restrictive proxy configurations that may only allow POST to a single path.
+ * @param endpoint The original API endpoint (e.g., '/analyze').
+ * @param body The original request body.
  * @returns A promise that resolves with the JSON response from the backend.
  */
 async function callProxyApi<T>(endpoint: string, body: any): Promise<T> {
+  const proxyRequestBody = {
+    endpoint: endpoint,
+    payload: body,
+  };
+
   const options: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(proxyRequestBody),
   };
 
-  // All API calls go to a relative /api endpoint, which is handled by the backend proxy.
-  const response = await fetch(`/api${endpoint}`, options);
+  // All API calls now go to the single /api/proxy endpoint.
+  // The backend proxy is expected to read the `endpoint` from the body 
+  // and forward the `payload` to the appropriate service.
+  const response = await fetch(`/api/proxy`, options);
 
   if (!response.ok) {
     // Try to parse a JSON error message from the backend, otherwise use status code and text.
@@ -138,7 +147,7 @@ export const performDmaicAnalysis = async (incident: IncidentReport): Promise<Dm
 
 export const performSopComplianceAnalysis = async (incident: IncidentReport, sopFileContent: string, sopFileMimeType: string): Promise<SopComplianceAnalysis> => {
     const body = { incident, sopFileContent, sopFileMimeType };
-    return callProxyApi<SopComplianceAnalysis>('/sop-compliance', body);
+    return callProxyApi<SopComplianceAnalysis>('/analyze-sop-compliance', body);
 };
 
 export const askSopQuestion = async (sopFileContent: string, sopMimeType: string, question: string): Promise<{ answer: string; sopReference: string; }> => {

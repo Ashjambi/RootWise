@@ -1,3 +1,5 @@
+
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { IncidentReport, IncidentStatus, SystemicInsight, KnowledgeCapsuleItem, ActionItem, DashboardBriefing, ActiveView, AppSettings, RecommendationStatus, ParetoAnalysis } from './types';
 import { INITIAL_INCIDENTS, CURRENT_USER, DEFAULT_SETTINGS } from './constants';
@@ -9,7 +11,7 @@ import NewIncidentModal from './components/NewIncidentModal';
 import GlobalCasesView from './components/GlobalCasesView';
 import KnowledgeBaseView from './components/KnowledgeBaseView';
 import ReportsView from './components/ReportsView';
-// FIX: Corrected import path casing to resolve case-sensitivity issue with filenames.
+// FIX: Corrected import path casing to resolve a filename conflict.
 import MyActionsView from './components/Myactionsview';
 import SopAssistantView from './components/SopAssistantView';
 import RiskDashboardView from './components/RiskDashboardView';
