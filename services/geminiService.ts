@@ -29,8 +29,8 @@ async function callApi<T>(endpoint: string, body: any): Promise<T> {
     body: JSON.stringify(body),
   };
 
-  // API calls are sent directly to their specific endpoints, prefixed with /Api.
-  const response = await fetch(`/Api${endpoint}`, options);
+  // API calls are sent directly to their specific endpoints, prefixed with /api.
+  const response = await fetch(`/api${endpoint}`, options);
 
   if (!response.ok) {
     // Try to parse a JSON error message from the backend, otherwise use status code and text.
