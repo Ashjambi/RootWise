@@ -139,7 +139,7 @@ export const performDmaicAnalysis = async (incident: IncidentReport): Promise<Dm
 
 export const performSopComplianceAnalysis = async (incident: IncidentReport, sopFileContent: string, sopFileMimeType: string): Promise<SopComplianceAnalysis> => {
     const body = { incident, sopFileContent, sopFileMimeType };
-    return callApi<SopComplianceAnalysis>('/sop-compliance-analysis', body);
+    return callApi<SopComplianceAnalysis>('/analyze-sop-compliance', body);
 };
 
 export const askSopQuestion = async (sopFileContent: string, sopMimeType: string, question: string): Promise<{ answer: string; sopReference: string; }> => {

@@ -11,8 +11,8 @@ import NewIncidentModal from './components/NewIncidentModal';
 import GlobalCasesView from './components/GlobalCasesView';
 import KnowledgeBaseView from './components/KnowledgeBaseView';
 import ReportsView from './components/ReportsView';
-// FIX: Corrected import path to match filename casing 'Myactionsview.tsx'.
-import MyActionsView from './components/Myactionsview';
+// FIX: Corrected import path to match component file casing 'MyActionsView.tsx'.
+import MyActionsView from './components/MyActionsView';
 import SopAssistantView from './components/SopAssistantView';
 import RiskDashboardView from './components/RiskDashboardView';
 import AboutView from './components/AboutView';
