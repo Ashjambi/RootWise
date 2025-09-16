@@ -33,6 +33,10 @@ try {
 
 function getAiInstance(): GoogleGenAI {
     if (!ai) {
+        // Add a more specific error for browser environments.
+        if (typeof process === 'undefined') {
+            throw new Error("بيئة التشغيل (المتصفح) لا تدعم `process.env`، مما يمنع الوصول الآمن إلى مفتاح API. يتطلب هذا التطبيق خادمًا وسيطًا (backend proxy) للعمل بشكل آمن في بيئة الإنتاج.");
+        }
         throw new Error("خدمة الذكاء الاصطناعي غير متاحة. يرجى التأكد من تهيئة مفتاح API بشكل صحيح في بيئة التشغيل.");
     }
     return ai;
