@@ -1,6 +1,7 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { IncidentReport, IncidentStatus, SystemicInsight, KnowledgeCapsuleItem, ActionItem, DashboardBriefing, ActiveView, AppSettings, RecommendationStatus, ParetoAnalysis } from './types';
 import { INITIAL_INCIDENTS, CURRENT_USER, DEFAULT_SETTINGS } from './constants';
+import { isAiAvailable, AI_UNAVAILABLE_ERROR } from './services/geminiService';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import OverviewDashboard from './components/OverviewDashboard';
@@ -9,8 +10,8 @@ import NewIncidentModal from './components/NewIncidentModal';
 import GlobalCasesView from './components/GlobalCasesView';
 import KnowledgeBaseView from './components/KnowledgeBaseView';
 import ReportsView from './components/ReportsView';
-// FIX: Corrected import path casing to consistently use PascalCase for the component file name.
-import MyActionsView from './components/MyActionsView';
+// FIX: Corrected import path casing to match the actual filename 'Myactionsview.tsx'.
+import MyActionsView from './components/Myactionsview';
 import SopAssistantView from './components/SopAssistantView';
 import RiskDashboardView from './components/RiskDashboardView';
 import AboutView from './components/AboutView';
@@ -28,6 +29,11 @@ const App: React.FC = () => {
   const [currentUser] = useState(CURRENT_USER);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [paretoAnalysis, setParetoAnalysis] = useState<ParetoAnalysis | null>(null);
+  const [aiAvailable, setAiAvailable] = useState(true);
+
+  useEffect(() => {
+    setAiAvailable(isAiAvailable());
+  }, []);
 
   const knowledgeBase = useMemo<KnowledgeCapsuleItem[]>(() => {
     return incidents
@@ -199,6 +205,12 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Header onNewReport={() => setIsModalOpen(true)} settings={settings} onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+      {!aiAvailable && (
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-800 p-4 mx-4 mt-4 rounded-r-lg" role="alert">
+          <p className="font-bold">تنبيه مهم: خدمة الذكاء الاصطناعي غير متاحة</p>
+          <p className="text-sm">{AI_UNAVAILABLE_ERROR}</p>
+        </div>
+      )}
       <div className="flex flex-1 relative">
         {isSidebarOpen && <div className="fixed inset-0 bg-black/30 z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} aria-hidden="true" />}
         <Sidebar

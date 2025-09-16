@@ -19,6 +19,8 @@ import {
 
 let ai: GoogleGenAI | null = null;
 
+export const AI_UNAVAILABLE_ERROR = "خدمة الذكاء الاصطناعي غير متاحة. لأسباب أمنية، لا يمكن استخدام مفتاح الواجهة البرمجية (API Key) مباشرة في المتصفح. يتطلب هذا التطبيق خادمًا وسيطًا (backend proxy) للتعامل مع طلبات الذكاء الاصطناعي بشكل آمن في بيئة الإنتاج. يرجى مراجعة دليل النشر للحصول على إرشادات.";
+
 try {
   // Safely check for process.env.API_KEY to avoid crashing in browser environments.
   if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
@@ -31,14 +33,13 @@ try {
   console.error("An unexpected error occurred during Gemini AI initialization:", e);
 }
 
+export function isAiAvailable(): boolean {
+    return !!ai;
+}
+
 function getAiInstance(): GoogleGenAI {
     if (!ai) {
-        // This is a user-facing error that explains the architectural requirement.
-        // It correctly identifies that running on a static host like Cloudflare Pages is the issue
-        // and guides the user towards a secure backend proxy architecture.
-        throw new Error(
-            "خدمة الذكاء الاصطناعي غير متاحة. لأسباب أمنية، لا يمكن استخدام مفتاح الواجهة البرمجية (API Key) مباشرة في المتصفح. يتطلب هذا التطبيق خادمًا وسيطًا (backend proxy) للتعامل مع طلبات الذكاء الاصطناعي بشكل آمن في بيئة الإنتاج. يرجى مراجعة دليل النشر للحصول على إرشادات."
-        );
+        throw new Error(AI_UNAVAILABLE_ERROR);
     }
     return ai;
 }
