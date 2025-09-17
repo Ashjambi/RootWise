@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI } from 'https://aistudiocdn.com/@google/genai';
 
 /**
  * معالج دالة Cloudflare Pages للطلبات من نوع POST.
