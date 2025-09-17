@@ -1,3 +1,4 @@
+
 import { 
     IncidentReport, AnalysisResult, GlobalCase, SimulatedAction, 
     PredictiveAnalysisResult, SystemicInsight, DeepDiveResult, Recommendation, 
@@ -42,14 +43,35 @@ async function callApiProxy(payload: {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `فشل الطلب مع الحالة ${response.status}`);
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `فشل الطلب مع الحالة ${response.status}`);
+      } else {
+        // The response is not JSON, likely an HTML error page from the server.
+        // Log the raw response for debugging but throw a user-friendly error.
+        const errorText = await response.text();
+        console.error("Server returned non-JSON error response body:", errorText);
+        throw new Error(`حدث خطأ في الخادم (الحالة: ${response.status}).`);
+      }
     }
     
-    return await response.json();
+    // Ensure the successful response is also JSON before parsing.
+    const successContentType = response.headers.get('content-type');
+    if (successContentType && successContentType.includes('application/json')) {
+        return await response.json();
+    }
+    
+    // If the response is successful but not JSON, it's an unexpected state.
+    const responseText = await response.text();
+    console.error("Server returned a successful but non-JSON response:", responseText);
+    throw new Error("استجابة غير متوقعة من الخادم.");
+
   } catch (e) {
     console.error("API Proxy call failed:", e);
-    throw new Error("فشل الاتصال بالواجهة البرمجية للذكاء الاصطناعي.");
+    // The error is already specific from the try block, rethrow it.
+    // Provide a fallback for network errors etc.
+    throw new Error((e as Error).message || "فشل الاتصال بالواجهة البرمجية للذكاء الاصطناعي.");
   }
 }
 
