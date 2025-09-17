@@ -65,7 +65,7 @@ const NewIncidentModal: React.FC<NewIncidentModalProps> = ({ onClose, onSubmit }
             const oversizedFiles: string[] = [];
             
             for (const file of addedFiles) {
-                if (file.size > 13 * 1024 * 1024) { // Increased file size limit to 13MB
+                if (file.size > 25 * 1024 * 1024) {
                     oversizedFiles.push(file.name);
                 } else {
                     validFiles.push(file);
@@ -73,7 +73,7 @@ const NewIncidentModal: React.FC<NewIncidentModalProps> = ({ onClose, onSubmit }
             }
             
             if (oversizedFiles.length > 0) {
-                setAnalysisError(`تم تجاوز الحد الأقصى لحجم الملف (13 ميجابايت). لم تتم إضافة الملفات التالية: ${oversizedFiles.join(', ')}`);
+                setAnalysisError(`تم تجاوز الحد الأقصى لحجم الملف (25 ميجابايت). لم تتم إضافة الملفات التالية: ${oversizedFiles.join(', ')}`);
             } else {
                 setAnalysisError(null);
             }
@@ -201,7 +201,7 @@ const NewIncidentModal: React.FC<NewIncidentModalProps> = ({ onClose, onSubmit }
                                                 <input id="file-upload" name="file-upload" type="file" className="sr-only" multiple onChange={handleFileChange} accept="application/pdf,image/*,video/*" />
                                             </label>
                                         </div>
-                                        <p className="text-xs text-gray-500">PDF, PNG, JPG, MP4 (13MB كحد أقصى)</p>
+                                        <p className="text-xs text-gray-500">PDF, PNG, JPG, MP4 (25MB كحد أقصى)</p>
                                     </div>
                                 </div>
                                 {analysisError && <p className="mt-2 text-xs text-red-600 text-center">{analysisError}</p>}
