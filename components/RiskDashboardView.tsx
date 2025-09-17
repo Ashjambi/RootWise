@@ -121,7 +121,7 @@ const RiskDashboardView: React.FC<RiskDashboardViewProps> = ({ incidents, onNavi
     };
 
     const handleExportCsv = () => {
-        const headers = ['Type', 'Name', 'Incident Count', 'Risk Score', 'Highest Severity'];
+        const headers = ['النوع', 'الاسم', 'عدد الحوادث', 'درجة الخطورة', 'أعلى خطورة'];
         
         const formatCsvRow = (data: (string | number)[]) => {
             return data.map(value => {
@@ -143,11 +143,11 @@ const RiskDashboardView: React.FC<RiskDashboardViewProps> = ({ incidents, onNavi
         };
         
         const csvContent = [
-            ...createCsvSection('Departments', departments),
+            ...createCsvSection('الأقسام', departments),
             '', 
-            ...createCsvSection('Root Causes', rootCauses),
+            ...createCsvSection('الأسباب الجذرية', rootCauses),
             '',
-            ...createCsvSection('Personnel', personnel)
+            ...createCsvSection('الأفراد', personnel)
         ].join('\n');
 
         const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
@@ -173,7 +173,7 @@ const RiskDashboardView: React.FC<RiskDashboardViewProps> = ({ incidents, onNavi
                         </p>
                     </div>
                      <Button onClick={handleExportCsv} disabled={departments.length === 0 && rootCauses.length === 0 && personnel.length === 0}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-2" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                         تصدير إلى CSV
                     </Button>
                 </div>

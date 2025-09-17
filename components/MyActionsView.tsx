@@ -294,9 +294,9 @@ const MyActionsView: React.FC<MyActionsViewProps> = ({ allActionItems, onNavigat
     return (
         <div className="h-full flex flex-col">
             <div className="mb-6">
-                <h1 className="text-4xl font-extrabold text-gray-900 font-cairo tracking-tight">كل الإجراءات التصحيحية (CAPA)</h1>
+                <h1 className="text-4xl font-extrabold text-gray-900 font-cairo tracking-tight">كل الإجراءات</h1>
                 <p className="mt-2 text-lg text-gray-600 max-w-2xl">
-                    جميع الإجراءات التصحيحية والوقائية المقترحة عبر كل الحوادث، لتوفير نظرة شاملة وتسهيل المتابعة على مستوى المنظمة.
+                    مكان مركزي لمتابعة جميع الإجراءات التصحيحية والوقائية المقترحة عبر كل الحوادث.
                 </p>
             </div>
             
